@@ -1,0 +1,15 @@
+{
+  "name": "c_parnaliser",
+  "version": "1.0.0",
+  "description": "C parse, and callback",
+  "main": "index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^14.0.14"
+  }
+}
