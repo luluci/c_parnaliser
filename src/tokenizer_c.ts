@@ -46,15 +46,16 @@ type lexer_state =
 	| '@univ_char_name'		// universal-character-name解析状態
 	| '@pp-number'
 	| '@NEWLINE'			// 改行
-	| 'a'		// a状態
-	| 'au'
-	| 'aut'
-	| 'auto'
-	| 'b'
-	| 'br'
-	| 'bre'
-	| 'brea'
-	| 'break'
+	| '@WHITESPACE'			// 空白
+	| 'a'					// a
+	| 'au'					// au
+	| 'aut'					// aut
+	| 'auto'				// auto
+	| 'b'					// b
+	| 'br'					// br
+	| 'bre'					// bre
+	| 'brea'				// brea
+	| 'break'				// break
 	| 'c'
 	| 'ca'
 	| 'cas'
@@ -66,7 +67,6 @@ type lexer_state =
 	| 'con'
 	| 'cons'
 	| 'const'
-	| 'con'
 	| 'cont'
 	| 'conti'
 	| 'contin'
@@ -203,6 +203,7 @@ type lexer_state =
 	| '_Bo'
 	| '_Boo'
 	| '_Bool'
+	| '_C'
 	| '_Co'
 	| '_Com'
 	| '_Comp'
@@ -243,9 +244,11 @@ export default class tokenizer_c implements tokenizer {
 	len_count: number;
 	id: token_id;
 	state : lexer_state;
+	is_keyword: boolean;
 	is_eof : boolean;
 	regex_punctuator:RegExp;
 	regex_identifier_digit_nondigit:RegExp;
+	regex_white_space: RegExp;
 
 	// Internal I/F
 	private ahead_str : string;
@@ -264,8 +267,10 @@ export default class tokenizer_c implements tokenizer {
 		this.state = '@init';
 		this.id = 'null';
 		this.is_eof = false;
+		this.is_keyword = false;
 		this.regex_punctuator = /[\[\](){}.+\-&*~!\/%<>=^|,#\r\n\s\t]/;
 		this.regex_identifier_digit_nondigit = /[0-9a-zA-Z_]/;
+		this.regex_white_space = /[\s\t\v\f]/;
 
 		// Internal I/F
 		this.ahead_str = "";
@@ -283,6 +288,7 @@ export default class tokenizer_c implements tokenizer {
 		this.len.splice(0);
 		this.len_count = 0;
 		this.err_info.splice(0);
+		this.is_keyword = false;
 	}
 
 	exec() : boolean {
@@ -327,471 +333,530 @@ export default class tokenizer_c implements tokenizer {
 			case '@NEWLINE':
 				result = this.execute_newline();
 				break;
+			case '@WHITESPACE':
+				result = this.execute_whitespace();
+				break;
 			case 'a':
-				result = this.execute_a();
+				result = this.execute_keyword_progress([ ['u', 'au'] ]);
+				break;
+			case 'au':
+				result = this.execute_keyword_progress([['t', 'aut']]);
+				break;
+			case 'aut':
+				result = this.execute_keyword_progress([['o', 'auto']]);
 				break;
 			case 'auto':
-				result = this.execute_auto();
+				result = this.execute_keyword('auto');
 				break;
-
-			/*
 			case 'b':
-				result = this.execute_b(char);
+				result = this.execute_keyword_progress([['r', 'br']]);
 				break;
 			case 'br':
-				result = this.execute_br(char);
+				result = this.execute_keyword_progress([['e', 'bre']]);
 				break;
 			case 'bre':
-				result = this.execute_bre(char);
+				result = this.execute_keyword_progress([['a', 'brea']]);
 				break;
 			case 'brea':
-				result = this.execute_brea(char);
+				result = this.execute_keyword_progress([['k', 'break']]);
 				break;
 			case 'break':
-				result = this.execute_break(char);
+				result = this.execute_keyword('break');
 				break;
 			case 'c':
-				result = this.execute_c(char);
+				result = this.execute_keyword_progress([['a', 'ca'], ['h', 'ch'], ['o', 'co']]);
 				break;
 			case 'ca':
-				result = this.execute_ca(char);
+				result = this.execute_keyword_progress([['s', 'cas']]);
 				break;
 			case 'cas':
-				result = this.execute_cas(char);
+				result = this.execute_keyword_progress([['e', 'case']]);
 				break;
 			case 'case':
-				result = this.execute_case(char);
+				result = this.execute_keyword('case');
 				break;
 			case 'ch':
-				result = this.execute_ch(char);
+				result = this.execute_keyword_progress([['a', 'cha']]);
 				break;
 			case 'cha':
-				result = this.execute_cha(char);
+				result = this.execute_keyword_progress([['r', 'char']]);
 				break;
 			case 'char':
-				result = this.execute_char(char);
+				result = this.execute_keyword('char');
 				break;
 			case 'co':
-				result = this.execute_co(char);
+				result = this.execute_keyword_progress([['n', 'con']]);
 				break;
 			case 'con':
-				result = this.execute_con(char);
+				result = this.execute_keyword_progress([['s', 'cons'], ['t', 'cont']]);
 				break;
 			case 'cons':
-				result = this.execute_cons(char);
+				result = this.execute_keyword_progress([['t', 'const']]);
 				break;
 			case 'const':
-				result = this.execute_const(char);
+				result = this.execute_keyword('const');
 				break;
 			case 'cont':
-				result = this.execute_cont(char);
+				result = this.execute_keyword_progress([['i', 'conti']]);
 				break;
 			case 'conti':
-				result = this.execute_conti(char);
+				result = this.execute_keyword_progress([['n', 'contin']]);
 				break;
 			case 'contin':
-				result = this.execute_contin(char);
+				result = this.execute_keyword_progress([['u', 'continu']]);
 				break;
 			case 'continu':
-				result = this.execute_continu(char);
+				result = this.execute_keyword_progress([['e', 'continue']]);
 				break;
 			case 'continue':
-				result = this.execute_continue(char);
+				result = this.execute_keyword('continue');
 				break;
 			case 'd':
-				result = this.execute_d(char);
+				result = this.execute_keyword_progress([['e', 'de'], ['o', 'do']]);
 				break;
 			case 'de':
-				result = this.execute_de(char);
+				result = this.execute_keyword_progress([['f', 'def']]);
 				break;
 			case 'def':
-				result = this.execute_def(char);
+				result = this.execute_keyword_progress([['a', 'defa']]);
 				break;
 			case 'defa':
-				result = this.execute_defa(char);
+				result = this.execute_keyword_progress([['u', 'defau']]);
 				break;
 			case 'defau':
-				result = this.execute_defau(char);
+				result = this.execute_keyword_progress([['l', 'defaul']]);
 				break;
 			case 'defaul':
-				result = this.execute_defaul(char);
+				result = this.execute_keyword_progress([['t', 'default']]);
 				break;
 			case 'default':
-				result = this.execute_default(char);
+				result = this.execute_keyword('default');
 				break;
 			case 'do':
-				result = this.execute_do(char);
+				result = this.execute_keyword('do', [['u', 'dou']]);
 				break;
 			case 'dou':
-				result = this.execute_dou(char);
+				result = this.execute_keyword_progress([['b', 'doub']]);
 				break;
 			case 'doub':
-				result = this.execute_doub(char);
+				result = this.execute_keyword_progress([['l', 'doubl']]);
 				break;
 			case 'doubl':
-				result = this.execute_doubl(char);
+				result = this.execute_keyword_progress([['e', 'double']]);
 				break;
 			case 'double':
-				result = this.execute_double(char);
+				result = this.execute_keyword('double');
 				break;
 			case 'e':
-				result = this.execute_e(char);
+				result = this.execute_keyword_progress([['l', 'el'], ['n', 'en'], ['x', 'ex']]);
 				break;
 			case 'el':
-				result = this.execute_el(char);
+				result = this.execute_keyword_progress([['s', 'els']]);
 				break;
 			case 'els':
-				result = this.execute_els(char);
+				result = this.execute_keyword_progress([['e', 'else']]);
 				break;
 			case 'else':
-				result = this.execute_else(char);
+				result = this.execute_keyword('else');
 				break;
 			case 'en':
-				result = this.execute_en(char);
+				result = this.execute_keyword_progress([['u', 'enu']]);
 				break;
 			case 'enu':
-				result = this.execute_enu(char);
+				result = this.execute_keyword_progress([['m', 'enum']]);
 				break;
 			case 'enum':
-				result = this.execute_enum(char);
+				result = this.execute_keyword('enum');
 				break;
 			case 'ex':
-				result = this.execute_ex(char);
+				result = this.execute_keyword_progress([['t', 'ext']]);
 				break;
 			case 'ext':
-				result = this.execute_ext(char);
+				result = this.execute_keyword_progress([['e', 'exte']]);
 				break;
 			case 'exte':
-				result = this.execute_exte(char);
+				result = this.execute_keyword_progress([['r', 'exter']]);
 				break;
 			case 'exter':
-				result = this.execute_exter(char);
+				result = this.execute_keyword_progress([['n', 'extern']]);
 				break;
 			case 'extern':
-				result = this.execute_extern(char);
+				result = this.execute_keyword('extern');
 				break;
 			case 'f':
-				result = this.execute_f(char);
+				result = this.execute_keyword_progress([['l', 'fl'], ['o', 'fo']]);
 				break;
 			case 'fl':
-				result = this.execute_fl(char);
+				result = this.execute_keyword_progress([['o', 'flo']]);
 				break;
 			case 'flo':
-				result = this.execute_flo(char);
+				result = this.execute_keyword_progress([['a', 'floa']]);
 				break;
 			case 'floa':
-				result = this.execute_floa(char);
+				result = this.execute_keyword_progress([['t', 'float']]);
 				break;
 			case 'float':
-				result = this.execute_float(char);
+				result = this.execute_keyword('float');
 				break;
 			case 'fo':
-				result = this.execute_fo(char);
+				result = this.execute_keyword_progress([['r', 'for']]);
 				break;
 			case 'for':
-				result = this.execute_for(char);
+				result = this.execute_keyword('for');
 				break;
 			case 'g':
-				result = this.execute_g(char);
+				result = this.execute_keyword_progress([['o', 'go']]);
 				break;
 			case 'go':
-				result = this.execute_go(char);
+				result = this.execute_keyword_progress([['t', 'got']]);
 				break;
 			case 'got':
-				result = this.execute_got(char);
+				result = this.execute_keyword_progress([['o', 'goto']]);
 				break;
 			case 'goto':
-				result = this.execute_goto(char);
+				result = this.execute_keyword('goto');
 				break;
 			case 'i':
-				result = this.execute_i(char);
+				result = this.execute_keyword_progress([['f', 'if'], ['n', 'in']]);
 				break;
 			case 'if':
-				result = this.execute_if(char);
+				result = this.execute_keyword('if');
 				break;
 			case 'in':
-				result = this.execute_in(char);
+				result = this.execute_keyword_progress([['l', 'inl'], ['t', 'int']]);
 				break;
 			case 'inl':
-				result = this.execute_inl(char);
+				result = this.execute_keyword_progress([['i', 'inli']]);
 				break;
 			case 'inli':
-				result = this.execute_inli(char);
+				result = this.execute_keyword_progress([['n', 'inlin']]);
 				break;
 			case 'inlin':
-				result = this.execute_inlin(char);
+				result = this.execute_keyword_progress([['e', 'inline']]);
 				break;
 			case 'inline':
-				result = this.execute_inline(char);
+				result = this.execute_keyword('inline');
 				break;
 			case 'int':
-				result = this.execute_int(char);
+				result = this.execute_keyword('int');
 				break;
 			case 'l':
-				result = this.execute_l(char);
+				result = this.execute_keyword_progress([['o', 'lo']]);
 				break;
 			case 'lo':
-				result = this.execute_lo(char);
+				result = this.execute_keyword_progress([['n', 'lon']]);
 				break;
 			case 'lon':
-				result = this.execute_lon(char);
+				result = this.execute_keyword_progress([['g', 'long']]);
 				break;
 			case 'long':
-				result = this.execute_long(char);
+				result = this.execute_keyword('long');
 				break;
 			case 'r':
-				result = this.execute_r(char);
+				result = this.execute_keyword_progress([['e', 're']]);
 				break;
 			case 're':
-				result = this.execute_re(char);
+				result = this.execute_keyword_progress([['g', 'reg'], ['s', 'res'], ['t', 'ret']]);
 				break;
 			case 'reg':
-				result = this.execute_reg(char);
+				result = this.execute_keyword_progress([['i', 'regi']]);
 				break;
 			case 'regi':
-				result = this.execute_regi(char);
+				result = this.execute_keyword_progress([['s', 'regis']]);
 				break;
 			case 'regis':
-				result = this.execute_regis(char);
+				result = this.execute_keyword_progress([['t', 'regist']]);
 				break;
 			case 'regist':
-				result = this.execute_regist(char);
+				result = this.execute_keyword_progress([['e', 'registe']]);
 				break;
 			case 'registe':
-				result = this.execute_registe(char);
+				result = this.execute_keyword_progress([['r', 'register']]);
 				break;
 			case 'register':
-				result = this.execute_register(char);
+				result = this.execute_keyword('register');
 				break;
 			case 'res':
-				result = this.execute_res(char);
+				result = this.execute_keyword_progress([['t', 'rest']]);
 				break;
 			case 'rest':
-				result = this.execute_rest(char);
+				result = this.execute_keyword_progress([['r', 'restr']]);
 				break;
 			case 'restr':
-				result = this.execute_restr(char);
+				result = this.execute_keyword_progress([['i', 'restri']]);
 				break;
 			case 'restri':
-				result = this.execute_restri(char);
+				result = this.execute_keyword_progress([['c', 'restric']]);
 				break;
 			case 'restric':
-				result = this.execute_restric(char);
+				result = this.execute_keyword_progress([['t', 'restrict']]);
 				break;
 			case 'restrict':
-				result = this.execute_restrict(char);
+				result = this.execute_keyword('restrict');
 				break;
 			case 'ret':
-				result = this.execute_ret(char);
+				result = this.execute_keyword_progress([['u', 'retu']]);
 				break;
 			case 'retu':
-				result = this.execute_retu(char);
+				result = this.execute_keyword_progress([['r', 'retur']]);
 				break;
 			case 'retur':
-				result = this.execute_retur(char);
+				result = this.execute_keyword_progress([['n', 'return']]);
 				break;
 			case 'return':
-				result = this.execute_return(char);
+				result = this.execute_keyword('return');
 				break;
 			case 's':
-				result = this.execute_s(char);
+				result = this.execute_keyword_progress([['h', 'sh'], ['i', 'si'], ['t', 'st'], ['w', 'sw']]);
 				break;
 			case 'sh':
-				result = this.execute_sh(char);
+				result = this.execute_keyword_progress([['o', 'sho']]);
 				break;
 			case 'sho':
-				result = this.execute_sho(char);
+				result = this.execute_keyword_progress([['r', 'shor']]);
 				break;
 			case 'shor':
-				result = this.execute_shor(char);
+				result = this.execute_keyword_progress([['t', 'short']]);
 				break;
 			case 'short':
-				result = this.execute_short(char);
+				result = this.execute_keyword('short');
 				break;
 			case 'si':
-				result = this.execute_si(char);
+				result = this.execute_keyword_progress([['g', 'sig'], ['z', 'siz']]);
 				break;
 			case 'sig':
-				result = this.execute_sig(char);
+				result = this.execute_keyword_progress([['n', 'sign']]);
 				break;
 			case 'sign':
-				result = this.execute_sign(char);
+				result = this.execute_keyword_progress([['e', 'signe']]);
 				break;
 			case 'signe':
-				result = this.execute_signe(char);
+				result = this.execute_keyword_progress([['d', 'signed']]);
 				break;
 			case 'signed':
-				result = this.execute_signed(char);
+				result = this.execute_keyword('signed');
 				break;
 			case 'siz':
-				result = this.execute_siz(char);
+				result = this.execute_keyword_progress([['e', 'size']]);
 				break;
 			case 'size':
-				result = this.execute_size(char);
+				result = this.execute_keyword_progress([['o', 'sizeo']]);
 				break;
 			case 'sizeo':
-				result = this.execute_sizeo(char);
+				result = this.execute_keyword_progress([['f', 'sizeof']]);
 				break;
 			case 'sizeof':
-				result = this.execute_sizeof(char);
+				result = this.execute_keyword('sizeof');
 				break;
 			case 'st':
-				result = this.execute_st(char);
+				result = this.execute_keyword_progress([['a', 'sta'], ['r', 'str']]);
 				break;
 			case 'sta':
-				result = this.execute_sta(char);
+				result = this.execute_keyword_progress([['t', 'stat']]);
 				break;
 			case 'stat':
-				result = this.execute_stat(char);
+				result = this.execute_keyword_progress([['i', 'stati']]);
 				break;
 			case 'stati':
-				result = this.execute_stati(char);
+				result = this.execute_keyword_progress([['c', 'static']]);
 				break;
 			case 'static':
-				result = this.execute_static(char);
+				result = this.execute_keyword('static');
 				break;
 			case 'str':
-				result = this.execute_str(char);
+				result = this.execute_keyword_progress([['u', 'stru']]);
 				break;
 			case 'stru':
-				result = this.execute_stru(char);
+				result = this.execute_keyword_progress([['c', 'struc']]);
 				break;
 			case 'struc':
-				result = this.execute_struc(char);
+				result = this.execute_keyword_progress([['t', 'struct']]);
 				break;
 			case 'struct':
-				result = this.execute_struct(char);
+				result = this.execute_keyword('struct');
 				break;
 			case 'sw':
-				result = this.execute_sw(char);
+				result = this.execute_keyword_progress([['i', 'swi']]);
 				break;
 			case 'swi':
-				result = this.execute_swi(char);
+				result = this.execute_keyword_progress([['t', 'swit']]);
 				break;
 			case 'swit':
-				result = this.execute_swit(char);
+				result = this.execute_keyword_progress([['c', 'switc']]);
 				break;
 			case 'switc':
-				result = this.execute_switc(char);
+				result = this.execute_keyword_progress([['h', 'switch']]);
 				break;
 			case 'switch':
-				result = this.execute_switch(char);
+				result = this.execute_keyword('switch');
 				break;
 			case 't':
-				result = this.execute_t(char);
+				result = this.execute_keyword_progress([['y', 'ty']]);
 				break;
 			case 'ty':
-				result = this.execute_ty(char);
+				result = this.execute_keyword_progress([['p', 'typ']]);
 				break;
 			case 'typ':
-				result = this.execute_typ(char);
+				result = this.execute_keyword_progress([['e', 'type']]);
 				break;
 			case 'type':
-				result = this.execute_type(char);
+				result = this.execute_keyword_progress([['d', 'typed']]);
 				break;
 			case 'typed':
-				result = this.execute_typed(char);
+				result = this.execute_keyword_progress([['e', 'typede']]);
 				break;
 			case 'typede':
-				result = this.execute_typede(char);
+				result = this.execute_keyword_progress([['f', 'typedef']]);
 				break;
 			case 'typedef':
-				result = this.execute_typedef(char);
+				result = this.execute_keyword('typedef');
 				break;
 			case 'u':
-				result = this.execute_u(char);
+				result = this.execute_keyword_progress([['n', 'un']]);
 				break;
 			case 'un':
-				result = this.execute_un(char);
+				result = this.execute_keyword_progress([['i', 'uni'], ['s', 'uns']]);
 				break;
 			case 'uni':
-				result = this.execute_uni(char);
+				result = this.execute_keyword_progress([['o', 'unio']]);
 				break;
 			case 'unio':
-				result = this.execute_unio(char);
+				result = this.execute_keyword_progress([['n', 'union']]);
 				break;
 			case 'union':
-				result = this.execute_union(char);
+				result = this.execute_keyword('union');
 				break;
 			case 'uns':
-				result = this.execute_uns(char);
+				result = this.execute_keyword_progress([['i', 'unsi']]);
 				break;
 			case 'unsi':
-				result = this.execute_unsi(char);
+				result = this.execute_keyword_progress([['g', 'unsig']]);
 				break;
 			case 'unsig':
-				result = this.execute_unsig(char);
+				result = this.execute_keyword_progress([['n', 'unsign']]);
 				break;
 			case 'unsign':
-				result = this.execute_unsign(char);
+				result = this.execute_keyword_progress([['e', 'unsigne']]);
 				break;
 			case 'unsigne':
-				result = this.execute_unsigne(char);
+				result = this.execute_keyword_progress([['d', 'unsigned']]);
 				break;
 			case 'unsigned':
-				result = this.execute_unsigned(char);
+				result = this.execute_keyword('unsigned');
 				break;
 			case 'v':
-				result = this.execute_v(char);
+				result = this.execute_keyword_progress([['o', 'vo']]);
 				break;
 			case 'vo':
-				result = this.execute_vo(char);
+				result = this.execute_keyword_progress([['i', 'voi'], ['l', 'vol']]);
 				break;
 			case 'voi':
-				result = this.execute_voi(char);
+				result = this.execute_keyword_progress([['d', 'void']]);
 				break;
 			case 'void':
-				result = this.execute_void(char);
+				result = this.execute_keyword('void');
 				break;
 			case 'vol':
-				result = this.execute_vol(char);
+				result = this.execute_keyword_progress([['a', 'vola']]);
 				break;
 			case 'vola':
-				result = this.execute_vola(char);
+				result = this.execute_keyword_progress([['t', 'volat']]);
 				break;
 			case 'volat':
-				result = this.execute_volat(char);
+				result = this.execute_keyword_progress([['i', 'volati']]);
 				break;
 			case 'volati':
-				result = this.execute_volati(char);
+				result = this.execute_keyword_progress([['l', 'volatil']]);
 				break;
 			case 'volatil':
-				result = this.execute_volatil(char);
+				result = this.execute_keyword_progress([['e', 'volatile']]);
 				break;
 			case 'volatile':
-				result = this.execute_volatile(char);
+				result = this.execute_keyword('volatile');
 				break;
 			case 'w':
-				result = this.execute_w(char);
+				result = this.execute_keyword_progress([['h', 'wh']]);
 				break;
 			case 'wh':
-				result = this.execute_wh(char);
+				result = this.execute_keyword_progress([['i', 'whi']]);
 				break;
 			case 'whi':
-				result = this.execute_whi(char);
+				result = this.execute_keyword_progress([['l', 'whil']]);
 				break;
 			case 'whil':
-				result = this.execute_whil(char);
+				result = this.execute_keyword_progress([['e', 'while']]);
 				break;
 			case 'while':
-				result = this.execute_while(char);
+				result = this.execute_keyword('while');
 				break;
 			case '_':
-				result = this.execute_ul(char);
+				result = this.execute_keyword_progress([['B', '_B'], ['C', '_C'], ['I', '_I']]);
+				break;
+			case '_B':
+				result = this.execute_keyword_progress([['o', '_Bo']]);
+				break;
+			case '_Bo':
+				result = this.execute_keyword_progress([['o', '_Boo']]);
+				break;
+			case '_Boo':
+				result = this.execute_keyword_progress([['l', '_Bool']]);
 				break;
 			case '_Bool':
-				result = this.execute_ul_Bool(char);
+				result = this.execute_keyword('_Bool');
+				break;
+			case '_C':
+				result = this.execute_keyword_progress([['o', '_Co']]);
+				break;
+			case '_Co':
+				result = this.execute_keyword_progress([['m', '_Com']]);
+				break;
+			case '_Com':
+				result = this.execute_keyword_progress([['p', '_Comp']]);
+				break;
+			case '_Comp':
+				result = this.execute_keyword_progress([['l', '_Compl']]);
+				break;
+			case '_Compl':
+				result = this.execute_keyword_progress([['e', '_Comple']]);
+				break;
+			case '_Comple':
+				result = this.execute_keyword_progress([['x', '_Complex']]);
 				break;
 			case '_Complex':
-				result = this.execute_ul_Complex(char);
+				result = this.execute_keyword('_Complex');
+				break;
+			case '_I':
+				result = this.execute_keyword_progress([['m', '_Im']]);
+				break;
+			case '_Im':
+				result = this.execute_keyword_progress([['a', '_Ima']]);
+				break;
+			case '_Ima':
+				result = this.execute_keyword_progress([['g', '_Imag']]);
+				break;
+			case '_Imag':
+				result = this.execute_keyword_progress([['i', '_Imagi']]);
+				break;
+			case '_Imagi':
+				result = this.execute_keyword_progress([['n', '_Imagin']]);
+				break;
+			case '_Imagin':
+				result = this.execute_keyword_progress([['a', '_Imagina']]);
+				break;
+			case '_Imagina':
+				result = this.execute_keyword_progress([['r', '_Imaginar']]);
+				break;
+			case '_Imaginar':
+				result = this.execute_keyword_progress([['y', '_Imaginary']]);
 				break;
 			case '_Imaginary':
-				result = this.execute_ul_Imaginary(char);
+				result = this.execute_keyword('_Imaginary');
 				break;
+				/*
 			case '\\':
-				result = this.execute_bslash(char);
+				result = this.execute_bslash();
 				break;
-			*/
+				*/
 
 			default:
 				result = false;
@@ -907,6 +972,13 @@ export default class tokenizer_c implements tokenizer {
 					this.id = 'NEWLINE';
 					result = true;
 					break;
+				case ' ':
+				case '\t':
+				case '\v':
+				case '\f':
+					this.state = '@WHITESPACE';	// state trans => 空白文字
+					// result = false;	// 解析継続
+					break;
 			}
 
 			this.forward_pos();
@@ -933,7 +1005,6 @@ export default class tokenizer_c implements tokenizer {
 			this.id = 'identifier';
 			result = true;
 		} else {
-
 			// posから3文字を取得する
 			// 'uto'であれば'auto'を候補として次の解析へ
 			// 'uto'でない(文字列長不足を含む)ならばidentifierとして次の解析へ
@@ -941,42 +1012,266 @@ export default class tokenizer_c implements tokenizer {
 
 			if (subst_str == "uto") {
 				this.state = 'auto';
+				this.forward_pos(subst_len);
 			} else {
 				this.state = '@identifier';
 			}
-
-			this.forward_pos(subst_len);
 		}
 
 		return result;
 	}
 
-	private execute_auto(): boolean {
+	/**
+	 * 'b'から始まるtokenの解析
+	 * @param text 
+	 * @param pos 
+	 */
+	private execute_b(): boolean {
+		let subst_str: string;
+		let subst_len: number;
 		let result: boolean;
 		result = false;
 
 		// EOF到達していたら終了
 		if (this.is_eof) {
-			this.id = 'auto';
+			this.id = 'identifier';
+			result = true;
+		} else {
+			// posから4文字を取得する
+			// 'reak'であれば'break'を候補として次の解析へ
+			// 'reak'でない(文字列長不足を含む)ならばidentifierとして次の解析へ
+			[subst_str, subst_len] = this.get_ahead(4);
+
+			if (subst_str == "reak") {
+				this.state = 'break';
+				this.forward_pos(subst_len);
+			} else {
+				this.state = '@identifier';
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * 'c'から始まるtokenの解析
+	 * @param text 
+	 * @param pos 
+	 */
+	private execute_c(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			this.id = 'identifier';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			switch (char) {
+				case 'a':
+					this.state = 'ca';
+					this.forward_pos();
+					break;
+				case 'h':
+					this.state = 'ch';
+					this.forward_pos();
+					break;
+				case 'o':
+					this.state = 'co';
+					this.forward_pos();
+					break;
+				default:
+					this.state = '@identifier';
+					break;
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * 'ca'から始まるtokenの解析
+	 * @param text 
+	 * @param pos 
+	 */
+	private execute_ca(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			this.id = 'identifier';
+			result = true;
+		} else {
+			// posから2文字を取得する
+			// 'se'であれば'case'を候補として次の解析へ
+			// 'se'でない(文字列長不足を含む)ならばidentifierとして次の解析へ
+			[subst_str, subst_len] = this.get_ahead(2);
+
+			if (subst_str == "se") {
+				this.state = 'case';
+				this.forward_pos(subst_len);
+			} else {
+				this.state = '@identifier';
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * 'ch'から始まるtokenの解析
+	 * @param text 
+	 * @param pos 
+	 */
+	private execute_ch(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			this.id = 'identifier';
+			result = true;
+		} else {
+			// posから2文字を取得する
+			// 'ar'であれば'char'を候補として次の解析へ
+			// 'ar'でない(文字列長不足を含む)ならばidentifierとして次の解析へ
+			[subst_str, subst_len] = this.get_ahead(2);
+
+			if (subst_str == "ar") {
+				this.state = 'char';
+				this.forward_pos(subst_len);
+			} else {
+				this.state = '@identifier';
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * 'co'から始まるtokenの解析
+	 * @param text 
+	 * @param pos 
+	 */
+	private execute_co(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			this.id = 'identifier';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 'n'であれば'con'を候補として次の解析へ
+			// 'n'でない(文字列長不足を含む)ならばidentifierとして次の解析へ
+
+			if (char == "n") {
+				this.state = 'con';
+				this.forward_pos();
+			} else {
+				this.state = '@identifier';
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * keyword解析(1～N-1文字目まで)
+	 * 次にkeywordとして期待する文字が来たらkeyword解析を継続する
+	 */
+	private execute_keyword_progress(exp_info: [string, lexer_state][]): boolean {
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			this.id = 'identifier';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			// 引数で指定された期待文字かチェック
+			// マッチしなかった場合はidentifierの解析へ遷移
+			let exp_char: string;
+			let state: lexer_state;
+			let match: boolean;
+			match = false;
+			for ([exp_char, state] of exp_info) {
+				if (char == exp_char) {
+					this.state = state;
+					this.forward_pos();
+					match = true;
+					break;
+				}
+			}
+			// 期待文字ではなかった
+			if (!match) {
+				this.state = '@identifier';
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * keyword解析(N文字目)
+	 * 次に区切り文字が来たらkeywordが決定する。
+	 * 解析済み字句が別のkeywordにつながるときはexp_infoを指定する。
+	 * exp_infoが指定されたとき、keywordとして期待する文字が来たらkeyword解析を継続する。
+	 * (例：入力が'do'のとき、区切り文字が来たら'do'確定、'double'と続けば別のkeywordになる)
+	 * @param id 
+	 * @param exp_info
+	 */
+	private execute_keyword(id: token_id, exp_info?: [string, lexer_state][]): boolean {
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			this.id = id;
+			this.is_keyword = true;
 			this.state = '@end';
 			result = true;
 		} else {
-
 			// 次の文字を取得
 			// 区切り文字であればtoken取得完了
 			// 区切り文字でなければidentifierの解析になる
-			let char : string;
+			let char: string;
 			char = this.text[this.pos];
-
 			if (this.regex_punctuator.test(char)) {
-				this.id = 'auto';
+				this.id = id;
+				this.is_keyword = true;
 				this.state = '@end';
 				result = true;
 			} else {
-				this.state = '@identifier';
-				this.forward_pos();
+				// exp_infoが指定されたときは次のkeyword解析へ
+				// 指定されなかったときはidentifier解析へ
+				if (exp_info) {
+					result = this.execute_keyword_progress(exp_info);
+				} else {
+					this.state = '@identifier';
+					this.forward_pos();
+				}
 			}
-
 		}
 
 		return result;
@@ -992,7 +1287,6 @@ export default class tokenizer_c implements tokenizer {
 			this.state = '@end';
 			result = true;
 		} else {
-
 			// 次の文字を取得
 			// identifier-digit/nondigitであれば継続
 			// universal-character-nameであれば継続
@@ -1099,6 +1393,53 @@ export default class tokenizer_c implements tokenizer {
 		return result;
 	}
 
+	private execute_whitespace(): boolean {
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			this.id = 'WHITESPACE';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			// 複数の空白文字はまとめて1つとする。
+			// 改行は別物として扱う。
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char.match( this.regex_white_space )) {
+				this.forward_pos();
+			} else {
+				this.id = 'WHITESPACE';
+				this.state = '@end';
+				result = true;
+			}
+		}
+
+		return result;
+	}
+
+	/*
+	private execute_bslash(): boolean {
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			// '\'で終了時は文法エラー
+			this.id = 'ERROR';
+			this.state = '@end';
+			result = true;
+		} else {
+
+		}
+
+		return result;
+	}
+	*/
+
 	/*
 	private execute_(): boolean {
 		let result: boolean;
@@ -1161,6 +1502,12 @@ export default class tokenizer_c implements tokenizer {
 		this.len_count = 0;
 	}
 
+	/**
+	 * 字句解析で構文エラーを検出したとき、検出した箇所を登録する。
+	 * エラー発生時も可能であれば解析を継続する。
+	 * @param pos_ 
+	 * @param err_id_ 
+	 */
 	private commit_err(pos_: number, err_id_: token_err_id) {
 		this.err_info.push({ pos: pos_, err_id: err_id_ });
 	}

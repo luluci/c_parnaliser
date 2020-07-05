@@ -24,6 +24,7 @@ export function dump(token: lexer_token) : string {
 	result += ("00000" + token.col).slice(-5);
 	result += ")";
 	result += "[";
+	if (token.keyword) result += "(keyword) ";
 	result += token.token;
 	result += "]";
 
@@ -109,22 +110,21 @@ export default class lexer {
 	private make_lexer_token(token: lexer_token) {
 
 		// token共通
+		token.id = this.token.id;
+		token.pos = this.token.pos;
 		token.row = this.row;
 		token.col = this.col;
+		token.len = this.token.pos - this.token.pos_begin;
+		token.keyword = this.token.is_keyword;
 		// token個別
 		switch (this.token.id) {
 			// EOF到達
 			case 'EOF':
 			case 'NEWLINE':
-				token.id = this.token.id;
-				token.pos = this.token.pos;
-				token.len = this.token.pos - this.token.pos_begin;
+			case 'WHITESPACE':
 				token.token = "@" + this.token.id.toString();
 				break;
 			default:
-				token.id = this.token.id;
-				token.pos = this.token.pos;
-				token.len = this.token.pos - this.token.pos_begin;
 				token.token = this.text.substring(this.token.pos_begin, this.token.pos_end);
 				break;
 		}
