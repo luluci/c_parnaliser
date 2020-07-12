@@ -108,6 +108,21 @@ export type token_id =
 	| '_Bool'
 	| '_Complex'
 	| '_Imaginary'
+	// PP-directive
+	| 'pp_if'
+	| 'pp_ifdef'
+	| 'pp_ifndef'
+	| 'pp_elif'
+	| 'pp_else'
+	| 'pp_endif'
+	| 'pp_include'
+	| 'pp_define'
+	| 'pp_undef'
+	| 'pp_line'
+	| 'pp_error'
+	| 'pp_pragma'
+	| 'pp_invalid_keyword'
+	| 'pp_token'
 	// null
 	| 'null';
 
@@ -127,5 +142,7 @@ export type token_sub_id =
 	// character-constant, string-literal
 	| 'char'						// 通常文字リテラル
 	| 'wide_char'					// ワイド文字リテラル
+	// PP-directive
+	| 'pp_keyword'
 	// null
 	| 'null';

@@ -42,6 +42,7 @@
 import { token_id, token_sub_id } from './token_id';
 import { token_err_id } from './token_err_id';
 import { tokenizer, token_error_info} from './tokenizer';
+import lexer from './lexer';
 //import token_error_info from './tokenizer';
 
 /**
@@ -270,6 +271,59 @@ type lexer_state =
 	| '#'
 	| '\''
 	| '"'
+	// PP-directive
+	| 'pp_i'
+	| 'pp_if'
+	| 'pp_ifd'
+	| 'pp_ifde'
+	| 'pp_ifdef'
+	| 'pp_ifn'
+	| 'pp_ifnd'
+	| 'pp_ifnde'
+	| 'pp_ifndef'
+	| 'pp_in'
+	| 'pp_inc'
+	| 'pp_incl'
+	| 'pp_inclu'
+	| 'pp_includ'
+	| 'pp_include'
+	| 'pp_e'
+	| 'pp_el'
+	| 'pp_eli'
+	| 'pp_elif'
+	| 'pp_els'
+	| 'pp_else'
+	| 'pp_en'
+	| 'pp_end'
+	| 'pp_endi'
+	| 'pp_endif'
+	| 'pp_er'
+	| 'pp_err'
+	| 'pp_erro'
+	| 'pp_error'
+	| 'pp_d'
+	| 'pp_de'
+	| 'pp_def'
+	| 'pp_defi'
+	| 'pp_defin'
+	| 'pp_define'
+	| 'pp_u'
+	| 'pp_un'
+	| 'pp_und'
+	| 'pp_unde'
+	| 'pp_undef'
+	| 'pp_l'
+	| 'pp_li'
+	| 'pp_lin'
+	| 'pp_line'
+	| 'pp_p'
+	| 'pp_pr'
+	| 'pp_pra'
+	| 'pp_prag'
+	| 'pp_pragm'
+	| 'pp_pragma'
+	| '@pp_invalid_keyword'		// 未定義keyword検出
+	| '@pp_token'				// pp_token
 	| '\0';
 
 export class token_error_info_c implements token_error_info {
@@ -309,6 +363,7 @@ export default class tokenizer_c implements tokenizer {
 	regex_int_suffix: RegExp;
 	regex_float_suffix: RegExp;
 	regex_simple_escape_seq: RegExp;
+	regex_pp_group: RegExp;
 
 	// Internal I/F
 	private ahead_str : string;
@@ -329,7 +384,7 @@ export default class tokenizer_c implements tokenizer {
 		this.sub_id = 'null';
 		this.is_eof = false;
 		this.is_keyword = false;
-		this.regex_punctuator = /[\[\](){}.+\-&*~!\/%<>=^|,#\r\n\s\t]/;
+		this.regex_punctuator = /[\[\](){}.+\-&*~!\/%<>=^|?:;,#\r\n\s\t]/;
 		this.regex_identifier_digit_nondigit = /[0-9a-zA-Z_]/;
 		this.regex_white_space = /[ \t\v\f]/;
 		this.regex_non_digit = /[_a-zA-Z]/;
@@ -340,6 +395,7 @@ export default class tokenizer_c implements tokenizer {
 		this.regex_int_suffix = /[uUlL]/;
 		this.regex_float_suffix = /[flFL]/;
 		this.regex_simple_escape_seq = /['"?\\abfnrtv]/;
+		this.regex_pp_group = /^(if|ifdef|ifndef|elif|else|endif|include|define|undef|line|error|pragma)/;
 
 		// Internal I/F
 		this.ahead_str = "";
@@ -353,12 +409,17 @@ export default class tokenizer_c implements tokenizer {
 	restart() {
 		this.id = 'null';
 		this.sub_id = 'null';
-		this.state = '@init';
 		this.pos_begin = this.pos;
 		this.len.splice(0);
 		this.len_count = 0;
 		this.err_info.splice(0);
 		this.is_keyword = false;
+		// state check
+		// 終端まで解析できていれば@initから再開する。
+		// PPはシーケンスで解析する。
+		if (this.state == '@end') {
+			this.state = '@init';
+		}
 	}
 
 	exec() : boolean {
@@ -1038,8 +1099,166 @@ export default class tokenizer_c implements tokenizer {
 			case ':':
 				result = this.execute_colon();
 				break;
+
+			// PP-directive
 			case '#':
 				result = this.execute_sharp();
+				break;
+			case 'pp_i':
+				result = this.execute_pp_keyword_progress([['f', 'pp_if'], ['n', 'pp_in']]);
+				break;
+			case 'pp_if':
+				result = this.execute_pp_keyword(['pp_if', '@pp_token'], [['d', 'pp_ifd'], ['n', 'pp_ifn']]);
+				break;
+			case 'pp_ifd':
+				result = this.execute_pp_keyword_progress([['e', 'pp_ifde']]);
+				break;
+			case 'pp_ifde':
+				result = this.execute_pp_keyword_progress([['f', 'pp_ifdef']]);
+				break;
+			case 'pp_ifdef':
+				result = this.execute_pp_keyword(['pp_ifdef', '@pp_token']);
+				break;
+			case 'pp_ifn':
+				result = this.execute_pp_keyword_progress([['d', 'pp_ifnd']]);
+				break;
+			case 'pp_ifnd':
+				result = this.execute_pp_keyword_progress([['e', 'pp_ifnde']]);
+				break;
+			case 'pp_ifnde':
+				result = this.execute_pp_keyword_progress([['f', 'pp_ifndef']]);
+				break;
+			case 'pp_ifndef':
+				result = this.execute_pp_keyword(['pp_ifndef', '@pp_token']);
+				break;
+			case 'pp_in':
+				result = this.execute_pp_keyword_progress([['c', 'pp_inc']]);
+				break;
+			case 'pp_inc':
+				result = this.execute_pp_keyword_progress([['l', 'pp_incl']]);
+				break;
+			case 'pp_incl':
+				result = this.execute_pp_keyword_progress([['u', 'pp_inclu']]);
+				break;
+			case 'pp_inclu':
+				result = this.execute_pp_keyword_progress([['d', 'pp_includ']]);
+				break;
+			case 'pp_includ':
+				result = this.execute_pp_keyword_progress([['e', 'pp_include']]);
+				break;
+			case 'pp_include':
+				result = this.execute_pp_keyword(['pp_include', '@pp_token']);
+				break;
+			case 'pp_e':
+				result = this.execute_pp_keyword_progress([['l', 'pp_el'], ['n', 'pp_en'], ['r', 'pp_er']]);
+				break;
+			case 'pp_el':
+				result = this.execute_pp_keyword_progress([['i', 'pp_eli'], ['s', 'pp_els']]);
+				break;
+			case 'pp_eli':
+				result = this.execute_pp_keyword_progress([['f', 'pp_elif']]);
+				break;
+			case 'pp_elif':
+				result = this.execute_pp_keyword(['pp_elif', '@pp_token']);
+				break;
+			case 'pp_els':
+				result = this.execute_pp_keyword_progress([['e', 'pp_else']]);
+				break;
+			case 'pp_else':
+				result = this.execute_pp_keyword(['pp_else', '@pp_token']);
+				break;
+			case 'pp_en':
+				result = this.execute_pp_keyword_progress([['d', 'pp_end']]);
+				break;
+			case 'pp_end':
+				result = this.execute_pp_keyword_progress([['i', 'pp_endi']]);
+				break;
+			case 'pp_endi':
+				result = this.execute_pp_keyword_progress([['f', 'pp_endif']]);
+				break;
+			case 'pp_endif':
+				result = this.execute_pp_keyword(['pp_endif', '@pp_token']);
+				break;
+			case 'pp_er':
+				result = this.execute_pp_keyword_progress([['r', 'pp_err']]);
+				break;
+			case 'pp_err':
+				result = this.execute_pp_keyword_progress([['o', 'pp_erro']]);
+				break;
+			case 'pp_erro':
+				result = this.execute_pp_keyword_progress([['r', 'pp_error']]);
+				break;
+			case 'pp_error':
+				result = this.execute_pp_keyword(['pp_error', '@pp_token']);
+				break;
+			case 'pp_d':
+				result = this.execute_pp_keyword_progress([['e', 'pp_de']]);
+				break;
+			case 'pp_de':
+				result = this.execute_pp_keyword_progress([['f', 'pp_def']]);
+				break;
+			case 'pp_def':
+				result = this.execute_pp_keyword_progress([['i', 'pp_defi']]);
+				break;
+			case 'pp_defi':
+				result = this.execute_pp_keyword_progress([['n', 'pp_defin']]);
+				break;
+			case 'pp_defin':
+				result = this.execute_pp_keyword_progress([['e', 'pp_define']]);
+				break;
+			case 'pp_define':
+				result = this.execute_pp_keyword(['pp_define', '@pp_token']);
+				break;
+			case 'pp_u':
+				result = this.execute_pp_keyword_progress([['n', 'pp_un']]);
+				break;
+			case 'pp_un':
+				result = this.execute_pp_keyword_progress([['d', 'pp_und']]);
+				break;
+			case 'pp_und':
+				result = this.execute_pp_keyword_progress([['e', 'pp_unde']]);
+				break;
+			case 'pp_unde':
+				result = this.execute_pp_keyword_progress([['f', 'pp_undef']]);
+				break;
+			case 'pp_undef':
+				result = this.execute_pp_keyword(['pp_undef', '@pp_token']);
+				break;
+			case 'pp_l':
+				result = this.execute_pp_keyword_progress([['i', 'pp_li']]);
+				break;
+			case 'pp_li':
+				result = this.execute_pp_keyword_progress([['n', 'pp_lin']]);
+				break;
+			case 'pp_lin':
+				result = this.execute_pp_keyword_progress([['e', 'pp_line']]);
+				break;
+			case 'pp_line':
+				result = this.execute_pp_keyword(['pp_line', '@pp_token']);
+				break;
+			case 'pp_p':
+				result = this.execute_pp_keyword_progress([['r', 'pp_pr']]);
+				break;
+			case 'pp_pr':
+				result = this.execute_pp_keyword_progress([['a', 'pp_pra']]);
+				break;
+			case 'pp_pra':
+				result = this.execute_pp_keyword_progress([['g', 'pp_prag']]);
+				break;
+			case 'pp_prag':
+				result = this.execute_pp_keyword_progress([['m', 'pp_pragm']]);
+				break;
+			case 'pp_pragm':
+				result = this.execute_pp_keyword_progress([['a', 'pp_pragma']]);
+				break;
+			case 'pp_pragma':
+				result = this.execute_pp_keyword(['pp_pragma', '@pp_token']);
+				break;
+			case '@pp_invalid_keyword':
+				result = this.execute_pp_invalid_keyword('@pp_token');
+				break;
+			case '@pp_token':
+				result = this.execute_pp_token();
 				break;
 
 			default:
@@ -1163,6 +1382,7 @@ export default class tokenizer_c implements tokenizer {
 				case '\n':
 					// '\n'は改行確定
 					this.id = 'NEWLINE';
+					this.state = '@end';
 					result = true;
 					break;
 				case ' ':
@@ -1175,31 +1395,37 @@ export default class tokenizer_c implements tokenizer {
 				case '[':
 					this.id = 'left_bracket';
 					this.sub_id = 'punctuator';
+					this.state = '@end';
 					result = true;
 					break;
 				case ']':
 					this.id = 'right_bracket';
 					this.sub_id = 'punctuator';
+					this.state = '@end';
 					result = true;
 					break;
 				case '(':
 					this.id = 'left_paren';
 					this.sub_id = 'punctuator';
+					this.state = '@end';
 					result = true;
 					break;
 				case ')':
 					this.id = 'right_paren';
 					this.sub_id = 'punctuator';
+					this.state = '@end';
 					result = true;
 					break;
 				case '{':
 					this.id = 'left_brace';
 					this.sub_id = 'punctuator';
+					this.state = '@end';
 					result = true;
 					break;
 				case '}':
 					this.id = 'right_brace';
 					this.sub_id = 'punctuator';
+					this.state = '@end';
 					result = true;
 					break;
 				case '.':
@@ -1225,6 +1451,7 @@ export default class tokenizer_c implements tokenizer {
 				case '~':
 					this.id = 'bitwise_complement_op';
 					this.sub_id = 'punctuator';
+					this.state = '@end';
 					result = true;
 					break;
 				case '!':
@@ -1262,6 +1489,7 @@ export default class tokenizer_c implements tokenizer {
 				case '?':
 					this.id = 'conditional_op';
 					this.sub_id = 'punctuator';
+					this.state = '@end';
 					result = true;
 					break;
 				case ':':
@@ -1271,11 +1499,13 @@ export default class tokenizer_c implements tokenizer {
 				case ';':
 					this.id = 'semicolon';
 					this.sub_id = 'punctuator';
+					this.state = '@end';
 					result = true;
 					break;
 				case ',':
 					this.id = 'comma';
 					this.sub_id = 'punctuator';
+					this.state = '@end';
 					result = true;
 					break;
 				case '#':
@@ -1458,8 +1688,8 @@ export default class tokenizer_c implements tokenizer {
 						// result = false;	// 解析継続
 					}
 				} else {
-					this.state = '@end';
 					this.id = 'identifier';
+					this.state = '@end';
 					result = true;
 				}
 			}
@@ -1488,6 +1718,7 @@ export default class tokenizer_c implements tokenizer {
 		}
 
 		this.id = 'NEWLINE';
+		this.state = '@end';
 		result = true;
 
 		return result;
@@ -1703,6 +1934,7 @@ export default class tokenizer_c implements tokenizer {
 					// ".."が出現した場合、.単独で区切り文字だったと判断して終了。
 					this.id = 'dot';
 					this.sub_id = 'punctuator';
+					this.state = '@end';
 					result = true;
 				}
 			} else if (char.match(this.regex_digit)) {
@@ -1715,6 +1947,7 @@ export default class tokenizer_c implements tokenizer {
 				// .は区切り文字だったと判断して終了。
 				this.id = 'dot';
 				this.sub_id = 'punctuator';
+				this.state = '@end';
 				result = true;
 			}
 		}
@@ -3187,13 +3420,15 @@ export default class tokenizer_c implements tokenizer {
 
 	/**
 	 * '#'から始まるtokenの解析
+	 * 6.10 Preprocessing directives
+	 * #はPPの文脈でのみ登場するため、PPを前提に解析を行う。
 	 */
 	private execute_sharp(): boolean {
 		let result: boolean;
 		result = false;
 
 		if (this.is_eof) {
-			// 1文字だけなら区切り文字
+			// 1文字だけなら区切り文字とみなす
 			this.id = 'sharp';
 			this.sub_id = 'punctuator';
 			this.state = '@end';
@@ -3202,19 +3437,268 @@ export default class tokenizer_c implements tokenizer {
 			// 次の文字を取得
 			let char: string;
 			char = this.text[this.pos];
-			// 区切り文字なので規定外の文字が登場しても別tokenとなる
 			switch (char) {
 				case '#':
-					this.id = 'sharp_sharp';
+					// ##で区切り文字とみなす
 					this.forward_pos();
+					this.id = 'sharp_sharp';
+					this.sub_id = 'punctuator';
+					this.state = '@end';
+					result = true;
 					break;
 				default:
-					this.id = 'sharp';
+					result = this.check_pp_keyword();
 					break;
 			}
-			this.sub_id = 'punctuator';
+		}
+
+		return result;
+	}
+
+	/**
+	 * Preprocessing directiveを解析する
+	 * '#'が出現した状態でチェックを行う。
+	 * keywordの解析を開始する。
+	 */
+	private check_pp_keyword(): boolean {
+		let result: boolean;
+		result = false;
+
+		// 次の文字を取得
+		let char: string;
+		char = this.text[this.pos];
+		// PP-directiveのkeywordを解析
+		//	#if
+		//	#ifdef
+		//	#ifndef
+		//	#elif
+		//	#else
+		//	#endif
+		//	#include
+		//	#define
+		//	#undef
+		//	#line
+		//	#error
+		//	#pragma
+		switch (char) {
+			case 'i':
+				this.state = 'pp_i';
+				this.forward_pos();
+				break;
+			case 'e':
+				this.state = 'pp_e';
+				this.forward_pos();
+				break;
+			case 'd':
+				this.state = 'pp_d';
+				this.forward_pos();
+				break;
+			case 'u':
+				this.state = 'pp_u';
+				this.forward_pos();
+				break;
+			case 'l':
+				this.state = 'pp_l';
+				this.forward_pos();
+				break;
+			case 'p':
+				this.state = 'pp_p';
+				this.forward_pos();
+				break;
+			default:
+				result = true;
+				break;
+		}
+
+		return result;
+	}
+
+	/**
+	 * pp-keyword解析(1～N-1文字目まで)
+	 * 次にkeywordとして期待する文字が来たらkeyword解析を継続する
+	 */
+	private execute_pp_keyword_progress(exp_info: [string, lexer_state][]): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 解析途中でEOFはエラー
+			this.id = 'pp_invalid_keyword';
+			this.sub_id = 'pp_keyword';
 			this.state = '@end';
 			result = true;
+			this.commit_err(this.pos - 1, 'pp_keyword');
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			// 引数で指定された期待文字かチェック
+			// マッチしなかった場合はエラー
+			let exp_char: string;
+			let state: lexer_state;
+			let match: boolean;
+			match = false;
+			for ([exp_char, state] of exp_info) {
+				if (char == exp_char) {
+					this.state = state;
+					this.forward_pos();
+					match = true;
+					break;
+				}
+			}
+			// 期待文字ではなかった
+			if (!match) {
+				// 未定義keywordとしてtokenの取得まで実施する
+				this.state = '@pp_invalid_keyword';
+				this.forward_pos();
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * pp-keyword解析(N文字目)
+	 * 次に区切り文字が来たらkeywordが決定する。
+	 * 解析済み字句が別のkeywordにつながるときはexp_infoを指定する。
+	 * exp_infoが指定されたとき、keywordとして期待する文字が来たらkeyword解析を継続する。
+	 * (例：入力が'do'のとき、区切り文字が来たら'do'確定、'double'と続けば別のkeywordになる)
+	 * @param id 
+	 * @param exp_info
+	 */
+	private execute_pp_keyword(kw_info: [token_id, lexer_state], exp_info?: [string, lexer_state][]): boolean {
+		let id: token_id;
+		let state: lexer_state;
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 解析途中でEOFはエラー
+			this.id = 'pp_invalid_keyword';
+			this.sub_id = 'pp_keyword';
+			this.state = '@end';
+			result = true;
+			this.commit_err(this.pos - 1, 'pp_keyword');
+		} else {
+			// 次の文字を取得
+			// 区切り文字であればtoken取得完了
+			// 区切り文字でなければidentifierの解析になる
+			let char: string;
+			char = this.text[this.pos];
+			if (this.regex_punctuator.test(char)) {
+				[id, state] = kw_info;
+				this.id = id;
+				this.sub_id = 'pp_keyword';
+				this.state = state;
+				result = true;
+			} else {
+				// exp_infoが指定されたときは次のkeyword解析へ
+				// 指定されなかったときは未定義keywordとしてtoken抽出
+				if (exp_info) {
+					result = this.execute_pp_keyword_progress(exp_info);
+				} else {
+					this.state = '@pp_invalid_keyword';
+					this.forward_pos();
+				}
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * pp-keyword解析(未定義)
+	 * pp-keyword解析中に未定義の文字が登場した場合、
+	 * 未定義keywordとしてtokenの抽出まで実施する
+	 */
+	private execute_pp_invalid_keyword(state: lexer_state): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 解析途中でEOFはエラー
+			this.id = 'pp_invalid_keyword';
+			this.sub_id = 'pp_keyword';
+			this.state = '@end';
+			result = true;
+			this.commit_err(this.pos - 1, 'pp_keyword');
+		} else {
+			// 次の文字を取得
+			// 区切り文字であればtoken取得完了
+			// 区切り文字でなければ処理継続
+			let char: string;
+			char = this.text[this.pos];
+			if (this.regex_punctuator.test(char)) {
+				this.id = 'pp_invalid_keyword';
+				this.sub_id = 'pp_keyword';
+				this.state = state;
+				result = true;
+				this.commit_err(this.pos - 1, 'pp_keyword');
+			} else {
+				this.forward_pos();
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * pp-token解析
+	 * pp-keyword以後は改行までをtokenとする
+	 */
+	private execute_pp_token(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			this.id = 'pp_token';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 改行までがtokenとなる
+			switch (char) {
+				case '\\':
+					// backslashが出現したら次の改行記号を無視する。
+					this.forward_pos();
+					// 1文字先読み(EOFのケアとして先読み関数を使う)
+					let check: boolean;
+					check = false;
+					[subst_str, subst_len] = this.get_ahead(1);
+					if (subst_str == '\r') {
+						this.forward_pos();
+						check = true;
+					}
+					[subst_str, subst_len] = this.get_ahead(1);
+					if (subst_str == '\n') {
+						this.forward_pos();
+						check = true;
+					}
+					if (check) {
+						// 改行を記憶する
+						this.commit_len();
+					}
+					// 解析継続
+					break;
+				case '\r':
+				case '\n':
+					// \r or \n が登場したら解析終了
+					// 改行記号の解析は別の処理時で実施
+					this.id = 'pp_token';
+					this.state = '@end';
+					result = true;
+					break;
+				default:
+					// 改行以外はすべて受け付ける
+					this.forward_pos();
+					break;
+			}
 		}
 
 		return result;

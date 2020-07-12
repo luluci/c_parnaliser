@@ -1,24 +1,35 @@
 // keyword test
+auto break	char	continue 
+default do double else enum extern	
+float float for goto if inline int
+ long register restrict return   
+	short signed sizeof static struct switch
+	 	typedef union unsigned void volatile
+ 	 while _Bool _Complex _Imaginary
+// keyword? test
 a
 au
-aut
-auto
-automata
-absolute abs aaaaaaaaaaa
-
-b br bre brea break breaking broken
-cas case casee
-cha	char 			charr
-const continue default do double else enum extern flo	
-at float for goto if inline int long register restrict return   
-short signed sizeof static struct switch typedef union 
-unsigned void volatile while _Bool _Complex _Imaginary
-
+aut automata aut
+o autoo absolute abs aaaaaaaaaaa
+b br bre brea  breaking broken brea 
+k cas case casee casechar		charr
+	cons	onst	cconst	constt	cons	
+	t dodo	d
+		o doubl els 	el _ 	_Comp
+lex 
 /* identifier test */
+_hoge
+ahoge zhoge		identify001
 a_identi\uFFF0fier
+b_identi\u0000fier
+b_identi\U00009999fier
+	_識別子		だよ_999		_表示_777_
+/** identifier? test
+ */
+0_type
+9hoge   
 a_identi\uFFFier
-a_identi\UFFEEDDCCfier
-a_identi\UFFEEDDCier
+a_identi\UFFEEDDCCfier	_identi\UFFEEDDCier  
 
 /**
  * integer-constant test
@@ -27,24 +38,29 @@ a_identi\UFFEEDDCier
 0
 0123
 01237
+06u  05U  04uLL  03ll    02Ul  01Ull   00llu	
+// octal-constant?
 01238
-
+08
+012Ll    013lL      	014ullu 	015lull   016lulu
+// hex-constant
 0x12EF
+0x3456  	0xABCDEEE	0xFFFFFFFFFFFFFF
+	0x1234ll 	0x3333LL  0x4444U   0x5555LLU  0x66ULL 0x7LU 0x8ul
+// hex-constant?
 0x00FG
-0x3456
+0xfgf
+0xULL   0x  	0xZZ
 
+// decimal-constant
 1
 123
 8999
 99999LLU
 1ull
-2ullu
-3llul
 4lu
 5Lu
 6lU
-7lLU
-8Llu
 9llu
 10ull
 11uLL
@@ -53,7 +69,13 @@ a_identi\UFFEEDDCier
 14Ul
 15uL
 16UL
-
+// decimal-constant?
+2ullu
+3llul
+7lLU
+8Llu
+// floating-consntant test
+// decimal-float
 0123456789.
 .0123456789
 0123.4
@@ -85,14 +107,33 @@ a_identi\UFFEEDDCier
 0x.12FFL
 0x9AP-89F
 33.44hoge
-
-''
+// char-const
 'a'
 '(...)'
 'abcd'
-L''
 L'hoge'
+'hoge_''fufufu'L'string-lit'	'\t\t\r\n'
+L'\'\"\?\\\a\b\f\n\r\t\v   \0  \77 \012  \xFF \xA0 \xEEEEEEEEEEEEE'L'  \u12AB   \UAABBCCFF '
+// char-const?
+''
+L''
+'\uFFaz   \U123456789   \U1234567   \u123   \uABCDE'
+// string-literal
+""
+"hoge_""fufufu"L"string-lit"	"\t\t\r\n"
+L"\'\"\?\\\a\b\f\n\r\t\v   \0  \77 \012  \xFF \xA0 \xEEEEEEEEEEEEE"
 
+#include <stdio.h>
+#define HOGE (1)
+#define FUGA(a,b)	a##b
+#define A_INST(a)	#a
+#define FUGA_IF(a,b)	\
+		FUGA( A_INST(a), b )
+#if (HOGE==1)
+	#define BUFFF	111
+#else
+	#define FFFFF	1234
+#endif
 
 struct hoge
 {

@@ -14,10 +14,16 @@ lex = new lexer(text);
 let finish: boolean;
 finish = false;
 let item;
-do {
-    item = lex.exec();
-    console.log(dump(item));
 
-    if (item.id == 'EOF') finish = true;
-} while (!finish);
+try {
+    do {
+        item = lex.exec();
+        console.log(dump(item));
 
+        if (item.id == 'EOF') finish = true;
+    } while (!finish);
+} catch (e) {
+    console.log(e);
+}
+
+console.log("@test finish");

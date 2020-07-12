@@ -17,4 +17,6 @@ export type token_err_id =
 	| 'escape_sequence'
 	| 'hex_escape_sequence'
 	| 'multi_comment'
+	// PP-directive
+	| 'pp_keyword'
 	| 'null';
