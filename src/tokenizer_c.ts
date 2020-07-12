@@ -15,9 +15,18 @@
  * 				[0-9]+(\.[0-9]+)?[eE][+-]?[0-9]+[flFL]?
  * 				0x([0-9a-fA-F]+)?.([0-9a-fA-F]+)?[pP][+-]?
  * 			enumration-constant:
+ * 				(identifier)
  * 			character-constant:
+ * 				L?'([^'\\\r\n]|\\['"?\\abfnrtv]|\\[0-7]{1,3}|\\x[0-9a-fA-F]+)'
  * 		string-literal:
  * 		punctuator:
+ * 			[ ] ( ) { } . ->
+ * 			++ -- & * + - ~ !
+ * 			/ % << >> < > <= >= == != ^ | && ||
+ * 			? : ; ...
+ * 			= *= /= %= += -= <<= >>= &= ^= |=
+ * 			, # ##
+ * 			<: :> <% %> %: %:%:
  * 	preprocessing-token:
  * 		header-name:
  * 		identifier:
@@ -30,7 +39,7 @@
 
 'use strict';
 
-import { token_id } from './token_id';
+import { token_id, token_sub_id } from './token_id';
 import { token_err_id } from './token_err_id';
 import { tokenizer, token_error_info} from './tokenizer';
 //import token_error_info from './tokenizer';
@@ -40,22 +49,41 @@ import { tokenizer, token_error_info} from './tokenizer';
  * '@'から始まらない状態はkeyword解析途中の出現した文字までを示す
  */
 type lexer_state =
-	| '@init'				// 初期状態
-	| '@end'				// 終了状態
-	| '@identifier'			// identifier解析状態
-	| '@univ_char_name'		// universal-character-name解析状態
-	| '@pp-number'
-	| '@NEWLINE'			// 改行
-	| '@WHITESPACE'			// 空白
-	| 'a'					// a
-	| 'au'					// au
-	| 'aut'					// aut
-	| 'auto'				// auto
-	| 'b'					// b
-	| 'br'					// br
-	| 'bre'					// bre
-	| 'brea'				// brea
-	| 'break'				// break
+	| '@init'						// 初期状態
+	| '@end'						// 終了状態
+	| '@identifier'					// identifier解析状態
+	| '@decimal_constant'			// decimal-constant解析状態
+	| '@octal_constant'				// octal-constant解析状態
+	| '@hex_constant'				// hexadecimal-constant解析状態
+	| '@hex_constant_digit'			// hexadecimal-constant/hexadecimal-digit解析状態
+	| '@int_suffix'					// int-suffix解析状態
+	| '@unsigned_suffix'			// int-suffix/unsigned-suffix解析状態
+	| '@long_suffix'				// int-suffix/long(-long)-suffix解析状態
+	| '@fractional_constant'		// fractional-constant解析状態
+	| '@exponent_part'				// exponent-part解析状態
+	| '@exponent_part_digit'		// exponent-part/digit-sequence解析状態
+	| '@hex_fractional_constant'	// hexadecimal-fractional-constant解析状態
+	| '@binary_exponent_part'		// binary-exponent-part解析状態
+	| '@binary_exponent_part_digit'	// binary-exponent-part/digit-sequence解析状態
+	| '@float_suffix'				// floating-constant解析状態
+	| '@any_fractional_constant'	// (hexadecimal-)fractional-constant解析状態
+	| '@char_constant_begin'		// character-constant(1文字目)解析状態
+	| '@char_constant'				// character-constant解析状態
+	| '@c_char_sequence'			// c-char-sequence解析状態
+	| '@string_literal'				// string-literal解析状態
+	| '@NEWLINE'					// 改行
+	| '@WHITESPACE'					// 空白
+	| '@COMMENT_1LINE'				// コメント：1行
+	| '@COMMENT_MULTILINE'			// コメント：複数行
+	| 'a'							// a
+	| 'au'							// au
+	| 'aut'							// aut
+	| 'auto'						// auto
+	| 'b'							// b
+	| 'br'							// br
+	| 'bre'							// bre
+	| 'brea'						// brea
+	| 'break'						// break
 	| 'c'
 	| 'ca'
 	| 'cas'
@@ -119,6 +147,7 @@ type lexer_state =
 	| 'lo'
 	| 'lon'
 	| 'long'
+	| 'L'
 	| 'r'
 	| 're'
 	| 'reg'
@@ -220,7 +249,28 @@ type lexer_state =
 	| '_Imaginar'
 	| '_Imaginary'
 	| '0'
-	| '\\';
+	| '.'
+	| '-'
+	| '+'
+	| '&'
+	| '*'
+	| '~'
+	| '!'
+	| '/'
+	| '%'
+	| '<'
+	| '>'
+	| '='
+	| '^'
+	| '|'
+	| '?'
+	| ':'
+	| ';'
+	| ','
+	| '#'
+	| '\''
+	| '"'
+	| '\0';
 
 export class token_error_info_c implements token_error_info {
 	pos: number;
@@ -242,13 +292,23 @@ export default class tokenizer_c implements tokenizer {
 	err_info: token_error_info[];
 	// addtitional
 	len_count: number;
-	id: token_id;
+	id: token_id;						// tokenの意味を示すID
+	sub_id: token_sub_id;				// IDを細分化するサブID
 	state : lexer_state;
 	is_keyword: boolean;
 	is_eof : boolean;
+	// RegExp 
 	regex_punctuator:RegExp;
 	regex_identifier_digit_nondigit:RegExp;
 	regex_white_space: RegExp;
+	regex_non_digit: RegExp;
+	regex_digit: RegExp;
+	regex_octal_digit: RegExp;
+	regex_non_octal_digit: RegExp;
+	regex_hex_digit: RegExp;
+	regex_int_suffix: RegExp;
+	regex_float_suffix: RegExp;
+	regex_simple_escape_seq: RegExp;
 
 	// Internal I/F
 	private ahead_str : string;
@@ -266,11 +326,20 @@ export default class tokenizer_c implements tokenizer {
 		this.len_count = 0;
 		this.state = '@init';
 		this.id = 'null';
+		this.sub_id = 'null';
 		this.is_eof = false;
 		this.is_keyword = false;
 		this.regex_punctuator = /[\[\](){}.+\-&*~!\/%<>=^|,#\r\n\s\t]/;
 		this.regex_identifier_digit_nondigit = /[0-9a-zA-Z_]/;
-		this.regex_white_space = /[\s\t\v\f]/;
+		this.regex_white_space = /[ \t\v\f]/;
+		this.regex_non_digit = /[_a-zA-Z]/;
+		this.regex_digit = /[0-9]/;
+		this.regex_octal_digit = /[0-7]/;
+		this.regex_non_octal_digit = /[8-9]/;
+		this.regex_hex_digit = /[0-9a-fA-F]/;
+		this.regex_int_suffix = /[uUlL]/;
+		this.regex_float_suffix = /[flFL]/;
+		this.regex_simple_escape_seq = /['"?\\abfnrtv]/;
 
 		// Internal I/F
 		this.ahead_str = "";
@@ -283,6 +352,7 @@ export default class tokenizer_c implements tokenizer {
 	 */
 	restart() {
 		this.id = 'null';
+		this.sub_id = 'null';
 		this.state = '@init';
 		this.pos_begin = this.pos;
 		this.len.splice(0);
@@ -321,20 +391,82 @@ export default class tokenizer_c implements tokenizer {
 		let result: boolean
 
 		switch (this.state) {
+			case '@end':
+				result = true;
+				break;
 			case '@init':
 				result = this.execute_init();
 				break;
 			case '@identifier':
 				result = this.execute_identifier();
 				break;
-			case '@univ_char_name':
-				result = this.execute_univ_char_name();
+			case '@decimal_constant':
+				result = this.execute_decimal_constant();
+				break;
+			case '@octal_constant':
+				result = this.execute_octal_constant();
+				break;
+			case '@hex_constant':
+				result = this.execute_hex_constant();
+				break;
+			case '@hex_constant_digit':
+				result = this.execute_hex_constant_digit();
+				break;
+			case '@int_suffix':
+				result = this.execute_int_suffix();
+				break;
+			case '@long_suffix':
+				result = this.execute_long_suffix();
+				break;
+			case '@unsigned_suffix':
+				result = this.execute_unsigned_suffix();
+				break;
+			case '@fractional_constant':
+				result = this.execute_fractional_constant();
+				break;
+			case '@exponent_part':
+				result = this.execute_exponent_part();
+				break;
+			case '@exponent_part_digit':
+				result = this.execute_exponent_part_digit();
+				break;
+			case '@hex_fractional_constant':
+				result = this.execute_hex_fractional_constant();
+				break;
+			case '@binary_exponent_part':
+				result = this.execute_binary_exponent_part();
+				break;
+			case '@binary_exponent_part_digit':
+				result = this.execute_binary_exponent_part_digit();
+				break;
+			case '@any_fractional_constant':
+				result = this.execute_any_fractional_constant();
+				break;
+			case '@char_constant_begin':
+				result = this.execute_char_constant_begin();
+				break;
+			case '@char_constant':
+				result = this.execute_char_constant();
+				break;
+			/*
+			case '@c_char_sequence':
+				result = this.execute_c_char_sequence();
+				break;
+			*/
+			case '@string_literal':
+				result = this.execute_string_literal();
 				break;
 			case '@NEWLINE':
 				result = this.execute_newline();
 				break;
 			case '@WHITESPACE':
 				result = this.execute_whitespace();
+				break;
+			case '@COMMENT_1LINE':
+				result = this.execute_comment_1line();
+				break;
+			case '@COMMENT_MULTILINE':
+				result = this.execute_comment_multiline();
 				break;
 			case 'a':
 				result = this.execute_keyword_progress([ ['u', 'au'] ]);
@@ -551,6 +683,9 @@ export default class tokenizer_c implements tokenizer {
 				break;
 			case 'long':
 				result = this.execute_keyword('long');
+				break;
+			case 'L':
+				result = this.execute_L();
 				break;
 			case 'r':
 				result = this.execute_keyword_progress([['e', 're']]);
@@ -852,11 +987,60 @@ export default class tokenizer_c implements tokenizer {
 			case '_Imaginary':
 				result = this.execute_keyword('_Imaginary');
 				break;
-				/*
-			case '\\':
-				result = this.execute_bslash();
+			case '0':
+				result = this.execute_0();
 				break;
-				*/
+			case '\'':
+				result = this.execute_single_quote();
+				break;
+			case '"':
+				result = this.execute_double_quote();
+				break;
+			case '.':
+				result = this.execute_dot();
+				break;
+			case '-':
+				result = this.execute_minus();
+				break;
+			case '+':
+				result = this.execute_plus();
+				break;
+			case '&':
+				result = this.execute_ampersand();
+				break;
+			case '*':
+				result = this.execute_asterisk();
+				break;
+			case '!':
+				result = this.execute_exclamation();
+				break;
+			case '/':
+				result = this.execute_slash();
+				break;
+			case '%':
+				result = this.execute_percent();
+				break;
+			case '<':
+				result = this.execute_left_angle_bracket();
+				break;
+			case '>':
+				result = this.execute_right_angle_bracket();
+				break;
+			case '=':
+				result = this.execute_equal();
+				break;
+			case '^':
+				result = this.execute_caret();
+				break;
+			case '|':
+				result = this.execute_vertical_bar();
+				break;
+			case ':':
+				result = this.execute_colon();
+				break;
+			case '#':
+				result = this.execute_sharp();
+				break;
 
 			default:
 				result = false;
@@ -867,6 +1051,7 @@ export default class tokenizer_c implements tokenizer {
 	}
 
 	private execute_init() : boolean {
+		let char :string;
 		let result : boolean;
 		result = false;
 
@@ -877,7 +1062,8 @@ export default class tokenizer_c implements tokenizer {
 			result = true;
 		} else {
 			// 1文字目
-			switch (this.text[this.pos]) {
+			char = this.text[this.pos];
+			switch (char) {
 				case 'a':
 					this.state = 'a';	// state trans => a
 					// result = false;	// 解析継続
@@ -912,6 +1098,10 @@ export default class tokenizer_c implements tokenizer {
 					break;
 				case 'l':
 					this.state = 'l';	// state trans => l
+					// result = false;	// 解析継続
+					break;
+				case 'L':
+					this.state = 'L';	// state trans => L
 					// result = false;	// 解析継続
 					break;
 				case 'r':
@@ -955,12 +1145,15 @@ export default class tokenizer_c implements tokenizer {
 				case '7':
 				case '8':
 				case '9':
-				case '.':
-					this.state = '@pp-number';	// state trans => 0
+					this.state = '@decimal_constant';
 					// result = false;	// 解析継続
 					break;
-				case '\\':
-					this.state = '\\';	// state trans => \
+				case '\'':
+					this.state = '\'';	// state trans => '
+					// result = false;	// 解析継続
+					break;
+				case '"':
+					this.state = '"';	// state trans => "
 					// result = false;	// 解析継続
 					break;
 				case '\r':
@@ -979,212 +1172,166 @@ export default class tokenizer_c implements tokenizer {
 					this.state = '@WHITESPACE';	// state trans => 空白文字
 					// result = false;	// 解析継続
 					break;
+				case '[':
+					this.id = 'left_bracket';
+					this.sub_id = 'punctuator';
+					result = true;
+					break;
+				case ']':
+					this.id = 'right_bracket';
+					this.sub_id = 'punctuator';
+					result = true;
+					break;
+				case '(':
+					this.id = 'left_paren';
+					this.sub_id = 'punctuator';
+					result = true;
+					break;
+				case ')':
+					this.id = 'right_paren';
+					this.sub_id = 'punctuator';
+					result = true;
+					break;
+				case '{':
+					this.id = 'left_brace';
+					this.sub_id = 'punctuator';
+					result = true;
+					break;
+				case '}':
+					this.id = 'right_brace';
+					this.sub_id = 'punctuator';
+					result = true;
+					break;
+				case '.':
+					this.state = '.';
+					// result = false;	// 解析継続
+					break;
+				case '-':
+					this.state = '-';
+					// result = false;	// 解析継続
+					break;
+				case '+':
+					this.state = '+';
+					// result = false;	// 解析継続
+					break;
+				case '&':
+					this.state = '&';
+					// result = false;	// 解析継続
+					break;
+				case '*':
+					this.state = '*';
+					// result = false;	// 解析継続
+					break;
+				case '~':
+					this.id = 'bitwise_complement_op';
+					this.sub_id = 'punctuator';
+					result = true;
+					break;
+				case '!':
+					this.state = '!';
+					// result = false;	// 解析継続
+					break;
+				case '/':
+					this.state = '/';
+					// result = false;	// 解析継続
+					break;
+				case '%':
+					this.state = '%';
+					// result = false;	// 解析継続
+					break;
+				case '<':
+					this.state = '<';
+					// result = false;	// 解析継続
+					break;
+				case '>':
+					this.state = '>';
+					// result = false;	// 解析継続
+					break;
+				case '=':
+					this.state = '=';
+					// result = false;	// 解析継続
+					break;
+				case '^':
+					this.state = '^';
+					// result = false;	// 解析継続
+					break;
+				case '|':
+					this.state = '|';
+					// result = false;	// 解析継続
+					break;
+				case '?':
+					this.id = 'conditional_op';
+					this.sub_id = 'punctuator';
+					result = true;
+					break;
+				case ':':
+					this.state = ':';
+					// result = false;	// 解析継続
+					break;
+				case ';':
+					this.id = 'semicolon';
+					this.sub_id = 'punctuator';
+					result = true;
+					break;
+				case ',':
+					this.id = 'comma';
+					this.sub_id = 'punctuator';
+					result = true;
+					break;
+				case '#':
+					this.state = '#';
+					// result = false;	// 解析継続
+					break;
+				default:
+					if (char.match(this.regex_non_digit)) {
+						this.state = '@identifier';
+						// result = false;	// 解析継続
+					}
+					break;
 			}
 
 			this.forward_pos();
 
 		}
 
-
 		return result;
 	}
 
 	/**
-	 * 'a'から始まるtokenの解析
-	 * @param text 
-	 * @param pos 
+	 * 'L'から始まるtokenの解析
+	 * character-sequence
 	 */
-	private execute_a(): boolean {
-		let subst_str: string;
-		let subst_len: number;
+	private execute_L(): boolean {
 		let result: boolean;
 		result = false;
 
 		// EOF到達していたら終了
 		if (this.is_eof) {
 			this.id = 'identifier';
-			result = true;
-		} else {
-			// posから3文字を取得する
-			// 'uto'であれば'auto'を候補として次の解析へ
-			// 'uto'でない(文字列長不足を含む)ならばidentifierとして次の解析へ
-			[subst_str, subst_len] = this.get_ahead(3);
-
-			if (subst_str == "uto") {
-				this.state = 'auto';
-				this.forward_pos(subst_len);
-			} else {
-				this.state = '@identifier';
-			}
-		}
-
-		return result;
-	}
-
-	/**
-	 * 'b'から始まるtokenの解析
-	 * @param text 
-	 * @param pos 
-	 */
-	private execute_b(): boolean {
-		let subst_str: string;
-		let subst_len: number;
-		let result: boolean;
-		result = false;
-
-		// EOF到達していたら終了
-		if (this.is_eof) {
-			this.id = 'identifier';
-			result = true;
-		} else {
-			// posから4文字を取得する
-			// 'reak'であれば'break'を候補として次の解析へ
-			// 'reak'でない(文字列長不足を含む)ならばidentifierとして次の解析へ
-			[subst_str, subst_len] = this.get_ahead(4);
-
-			if (subst_str == "reak") {
-				this.state = 'break';
-				this.forward_pos(subst_len);
-			} else {
-				this.state = '@identifier';
-			}
-		}
-
-		return result;
-	}
-
-	/**
-	 * 'c'から始まるtokenの解析
-	 * @param text 
-	 * @param pos 
-	 */
-	private execute_c(): boolean {
-		let subst_str: string;
-		let subst_len: number;
-		let result: boolean;
-		result = false;
-
-		// EOF到達していたら終了
-		if (this.is_eof) {
-			this.id = 'identifier';
+			this.state = '@end';
 			result = true;
 		} else {
 			// 次の文字を取得
 			let char: string;
 			char = this.text[this.pos];
 
-			switch (char) {
-				case 'a':
-					this.state = 'ca';
-					this.forward_pos();
-					break;
-				case 'h':
-					this.state = 'ch';
-					this.forward_pos();
-					break;
-				case 'o':
-					this.state = 'co';
-					this.forward_pos();
-					break;
-				default:
-					this.state = '@identifier';
-					break;
-			}
-		}
-
-		return result;
-	}
-
-	/**
-	 * 'ca'から始まるtokenの解析
-	 * @param text 
-	 * @param pos 
-	 */
-	private execute_ca(): boolean {
-		let subst_str: string;
-		let subst_len: number;
-		let result: boolean;
-		result = false;
-
-		// EOF到達していたら終了
-		if (this.is_eof) {
-			this.id = 'identifier';
-			result = true;
-		} else {
-			// posから2文字を取得する
-			// 'se'であれば'case'を候補として次の解析へ
-			// 'se'でない(文字列長不足を含む)ならばidentifierとして次の解析へ
-			[subst_str, subst_len] = this.get_ahead(2);
-
-			if (subst_str == "se") {
-				this.state = 'case';
-				this.forward_pos(subst_len);
-			} else {
-				this.state = '@identifier';
-			}
-		}
-
-		return result;
-	}
-
-	/**
-	 * 'ch'から始まるtokenの解析
-	 * @param text 
-	 * @param pos 
-	 */
-	private execute_ch(): boolean {
-		let subst_str: string;
-		let subst_len: number;
-		let result: boolean;
-		result = false;
-
-		// EOF到達していたら終了
-		if (this.is_eof) {
-			this.id = 'identifier';
-			result = true;
-		} else {
-			// posから2文字を取得する
-			// 'ar'であれば'char'を候補として次の解析へ
-			// 'ar'でない(文字列長不足を含む)ならばidentifierとして次の解析へ
-			[subst_str, subst_len] = this.get_ahead(2);
-
-			if (subst_str == "ar") {
-				this.state = 'char';
-				this.forward_pos(subst_len);
-			} else {
-				this.state = '@identifier';
-			}
-		}
-
-		return result;
-	}
-
-	/**
-	 * 'co'から始まるtokenの解析
-	 * @param text 
-	 * @param pos 
-	 */
-	private execute_co(): boolean {
-		let subst_str: string;
-		let subst_len: number;
-		let result: boolean;
-		result = false;
-
-		// EOF到達していたら終了
-		if (this.is_eof) {
-			this.id = 'identifier';
-			result = true;
-		} else {
-			// 次の文字を取得
-			let char: string;
-			char = this.text[this.pos];
-			// 'n'であれば'con'を候補として次の解析へ
-			// 'n'でない(文字列長不足を含む)ならばidentifierとして次の解析へ
-
-			if (char == "n") {
-				this.state = 'con';
+			if (char == "'") {
+				// 'が続けばcharacter-constant解析
+				this.state = '@char_constant_begin';
+				this.sub_id = 'wide_char';
 				this.forward_pos();
+			} else if (char == '"') {
+				// "が続けばstring-literal解析
+				this.state = '@string_literal';
+				this.sub_id = 'wide_char';
+				this.forward_pos();
+			} else if (char.match(this.regex_punctuator)) {
+				// 区切り文字が続けば終了
+				this.id = 'identifier';
+				this.state = '@end';
+				result = true;
 			} else {
+				// 上記以外の文字の場合、identifierに処理を任せる
 				this.state = '@identifier';
 			}
 		}
@@ -1248,6 +1395,7 @@ export default class tokenizer_c implements tokenizer {
 		// EOF到達していたら終了
 		if (this.is_eof) {
 			this.id = id;
+			this.sub_id = 'keyword';
 			this.is_keyword = true;
 			this.state = '@end';
 			result = true;
@@ -1259,6 +1407,7 @@ export default class tokenizer_c implements tokenizer {
 			char = this.text[this.pos];
 			if (this.regex_punctuator.test(char)) {
 				this.id = id;
+				this.sub_id = 'keyword';
 				this.is_keyword = true;
 				this.state = '@end';
 				result = true;
@@ -1298,8 +1447,16 @@ export default class tokenizer_c implements tokenizer {
 				this.forward_pos();
 			} else {
 				if (char == '\\') {
-					this.state = '@univ_char_name';
+					// '\'が出現したらuniversal-character-name解析開始
+					// チェック関数で一気に取得する
+					// 解析エラーが出てもidentifierとして解析継続
+					let check : boolean;
 					this.forward_pos();
+					check = this.check_univ_char_name();
+					if (check) {
+						// エラー検出時
+						// result = false;	// 解析継続
+					}
 				} else {
 					this.state = '@end';
 					this.id = 'identifier';
@@ -1307,63 +1464,6 @@ export default class tokenizer_c implements tokenizer {
 				}
 			}
 
-		}
-
-		return result;
-	}
-
-	/**
-	 * identifier解析のコンテキストの中で'\'を見つけたときにこの状態に遷移する。
-	 */
-	private execute_univ_char_name(): boolean {
-		let subst_str: string;
-		let subst_len: number;
-		let result: boolean;
-		result = false;
-
-		// EOF到達していたら終了
-		if (this.is_eof) {
-			// '\'で終了時は文法エラー
-			this.id = 'identifier';
-			this.commit_err(this.pos - 1, 'univ_char_name');
-			result = true;
-		} else {
-			// 次の文字を取得
-			// identifier-digit/nondigitであれば継続
-			// universal-character-nameであれば継続
-			// 上記以外で解析完了
-			let char: string;
-			char = this.text[this.pos];
-
-			if (char == 'u') {
-				this.forward_pos();
-				// '\u'にはhex-quad(4バイト)が続く
-				[subst_str, subst_len] = this.get_ahead(4);
-				if (subst_str.match(/[0-9a-fA-F]{4,4}/)) {
-					this.state = '@identifier';
-					this.forward_pos(subst_len);
-				} else {
-					// 文法エラー：'\u'にhex-quadが4つ続かない
-					this.state = '@identifier';
-					this.commit_err(this.pos - 2, 'univ_char_name');
-				}
-			} else if (char == 'U') {
-				this.forward_pos();
-				// '\U'にはhex-quad(4バイト)*2が続く
-				[subst_str, subst_len] = this.get_ahead(8);
-				if (subst_str.match(/[0-9a-fA-F]{8,8}/)) {
-					this.state = '@identifier';
-					this.forward_pos(subst_len);
-				} else {
-					// 文法エラー：'\u'にhex-quadが8つ続かない
-					this.state = '@identifier';
-					this.commit_err(this.pos - 2, 'univ_char_name');
-				}
-			} else {
-				// 文法エラー：'\'にuまたはUが続かない
-				this.state = '@identifier';
-				this.commit_err(this.pos - 1, 'univ_char_name');
-			}
 		}
 
 		return result;
@@ -1421,43 +1521,1852 @@ export default class tokenizer_c implements tokenizer {
 		return result;
 	}
 
-	/*
-	private execute_bslash(): boolean {
+/**
+ * //から始まるコメントの解析
+ */
+	private execute_comment_1line(): boolean {
+		let subst_str: string;
+		let subst_len: number;
 		let result: boolean;
 		result = false;
 
 		// EOF到達していたら終了
 		if (this.is_eof) {
-			// '\'で終了時は文法エラー
-			this.id = 'ERROR';
+			this.id = 'COMMENT';
+			this.sub_id = '1line';
 			this.state = '@end';
 			result = true;
 		} else {
-
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 改行までがコメントとなる
+			switch (char) {
+				case '\r':
+				case '\n':
+					// \r or \n が登場したら解析終了
+					// 改行記号の解析は別の処理時で実施
+					this.id = 'COMMENT';
+					this.sub_id = '1line';
+					this.state = '@end';
+					result = true;
+					break;
+				default:
+					// 改行以外はすべて受け付ける
+					this.forward_pos();
+					break;
+			}
 		}
 
 		return result;
 	}
-	*/
 
-	/*
-	private execute_(): boolean {
+	/**
+	 * /*から始まるコメントの解析
+	 */
+	private execute_comment_multiline(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら終了
+			this.id = 'COMMENT';
+			this.sub_id = 'multiline';
+			this.state = '@end';
+			result = true;
+			// コメントを閉じずにEOF到達はエラー
+			this.commit_err(this.pos - 1, 'multi_comment');
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// */までがコメントとなる
+			switch (char) {
+				case '\r':
+					this.forward_pos();
+					// \nまではワンセットとする
+					// 1文字先読み(EOFのケアとして先読み関数を使う)
+					[subst_str, subst_len] = this.get_ahead(1);
+					if (subst_str == "\n") {
+						this.forward_pos();
+					}
+					// 改行を記憶する
+					this.commit_len();
+					break;
+				case '\n':
+					this.forward_pos();
+					// 改行を記憶する
+					this.commit_len();
+					break;
+				case '*':
+					this.forward_pos();
+					// */までワンセットで解析
+					// 1文字先読み(EOFのケアとして先読み関数を使う)
+					[subst_str, subst_len] = this.get_ahead(1);
+					if (subst_str == "/") {
+						this.forward_pos();
+						// */検出で終了
+						this.id = 'COMMENT';
+						this.sub_id = 'multiline';
+						this.state = '@end';
+						result = true;
+					}
+					break;
+				default:
+					// */以外はすべて受け付ける
+					this.forward_pos();
+					break;
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * 'から始まるtokenの解析
+	 */
+	private execute_single_quote(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら文法エラー
+			this.id = 'char_constant';
+			this.state = '@end';
+			result = true;
+			this.commit_err(this.pos - 1, 'char_constant');
+		} else {
+			// そのままcharacter-constant解析へ遷移
+			this.state = '@char_constant_begin';
+			this.sub_id = 'char';
+		}
+
+		return result;
+	}
+
+	/**
+	 * "から始まるtokenの解析
+	 */
+	private execute_double_quote(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら文法エラー
+			this.id = 'string_literal';
+			this.state = '@end';
+			result = true;
+			this.commit_err(this.pos - 1, 'string_literal');
+		} else {
+			// そのままstring-literal解析へ遷移
+			this.state = '@string_literal';
+			this.sub_id = 'char';
+		}
+
+		return result;
+	}
+
+	/**
+	 * '.'から始まるtokenの解析
+	 * fractional-constant or hexadecimal-fractional-constant
+	 */
+	private execute_dot(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'dot';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char == ".") {
+				// 2文字先読み(EOFのケアとして先読み関数を使う)
+				[subst_str, subst_len] = this.get_ahead(2);
+				if (subst_str == "..") {
+					// "..."が出現した場合、区切り文字"..."
+					this.forward_pos(2);
+					this.id = 'ellipsis';
+					this.sub_id = 'punctuator';
+					this.state = '@end';
+					result = true;
+				} else {
+					// ".."が出現した場合、.単独で区切り文字だったと判断して終了。
+					this.id = 'dot';
+					this.sub_id = 'punctuator';
+					result = true;
+				}
+			} else if (char.match(this.regex_digit)) {
+				// digitが続けばfractional-constant解析
+				// 16進数floatは必ず0xから始まるので
+				// .から始まる場合は必ず10進数float
+				this.state = '@fractional_constant';
+			} else {
+				// hex-digit以外の文字が出現した場合、
+				// .は区切り文字だったと判断して終了。
+				this.id = 'dot';
+				this.sub_id = 'punctuator';
+				result = true;
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * '0'から始まるtokenの解析
+	 * octal-constant or hexadecimal-constant
+	 */
+	private execute_0(): boolean {
 		let result: boolean;
 		result = false;
 
 		// EOF到達していたら終了
 		if (this.is_eof) {
-			// '\'で終了時は文法エラー
-			this.id = 'ERROR';
+			this.id = 'octal_constant';
 			this.state = '@end';
 			result = true;
 		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
 
+			if (char.match(this.regex_octal_digit)) {
+				// octal-digitが続けばoctal-constant解析
+				this.state = '@octal_constant';
+				this.forward_pos();
+			} else if (char == "x" || char == "X") {
+				// x or X が続けばhexadecimal-constant解析
+				this.state = '@hex_constant';
+				this.forward_pos();
+			} else if (char == ".") {
+				// . が続けばfractional-constant解析
+				this.state = '@fractional_constant';
+				this.forward_pos();
+			} else if (char.match(this.regex_punctuator)) {
+				// 区切り文字が続けば終了
+				this.id = 'octal_constant';
+				this.state = '@end';
+				result = true;
+			} else if (char.match(this.regex_non_octal_digit)) {
+				// 文法エラー：non-octal-digitが出現
+				this.state = '@octal_constant';
+				this.forward_pos();
+				this.commit_err(this.pos - 1, 'octal_constant');
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'octal_constant');
+			}
 		}
 
 		return result;
 	}
-	*/
+
+	/**
+	 * octal-constantの解析
+	 */
+	private execute_octal_constant(): boolean {
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			this.id = 'octal_constant';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char.match(this.regex_octal_digit)) {
+				// octal-digitが続けばoctal-constant解析
+				this.state = '@octal_constant';
+				this.forward_pos();
+			} else if (char == ".") {
+				// . が続けばfractional-constant解析
+				this.state = '@fractional_constant';
+				this.forward_pos();
+			} else if (char.match(this.regex_int_suffix)) {
+				// int-suffixが続けばtoken区切りに到達することを確認する
+				// octal検出からのsuffix解析へ遷移を判定するためにidをセットしておく
+				this.id = 'octal_constant';
+				this.state = '@int_suffix';
+			} else if (char.match(this.regex_punctuator)) {
+				// 区切り文字が続けば終了
+				this.id = 'octal_constant';
+				this.state = '@end';
+				result = true;
+			} else if (char.match(this.regex_non_octal_digit)) {
+				// 文法エラー：non-octal-digitが出現
+				this.state = '@octal_constant';
+				this.forward_pos();
+				this.commit_err(this.pos - 1, 'octal_constant');
+			} else {
+				// 文法エラー：digit,区切り文字以外が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'octal_constant');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * decimal-constantの解析
+	 */
+	private execute_decimal_constant(): boolean {
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			this.id = 'decimal_constant';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char.match(this.regex_digit)) {
+				// digitが続けばdecimal-constant解析
+				this.state = '@decimal_constant';
+				this.forward_pos();
+			} else if (char == ".") {
+				// . が続けばfractional-constant解析へ遷移
+				this.state = '@fractional_constant';
+				this.forward_pos();
+			} else if (char == "e" || char == "E") {
+				// e or E が続けばexponent-part解析へ遷移 
+				this.state = '@exponent_part';
+				this.forward_pos();
+			} else if (char.match(this.regex_int_suffix)) {
+				// int-suffixが続けばtoken区切りに到達することを確認する
+				// decimal検出からのsuffix解析へ遷移を判定するためにidをセットしておく
+				this.id = 'decimal_constant';
+				this.state = '@int_suffix';
+			} else if (char.match(this.regex_punctuator)) {
+				// 区切り文字が続けば終了
+				this.id = 'decimal_constant';
+				this.state = '@end';
+				result = true;
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'decimal_constant');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * hexadecimal-constantの解析
+	 * "0x"検出後の1文字目の判定を行う
+	 */
+	private execute_hex_constant(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら文法エラー
+			this.id = 'hex_constant';
+			this.state = '@end';
+			result = true;
+			this.commit_err(this.pos - 1, 'hex_constant');
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char.match(this.regex_hex_digit)) {
+				// hex-digitが続けばhexadecimal-constantのdigit部を解析
+				this.state = '@hex_constant_digit';
+				this.forward_pos();
+			} else if (char == ".") {
+				// . が続けばhexadecimal-fractional-constant解析へ遷移
+				this.state = '@hex_fractional_constant';
+				this.forward_pos();
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'hex_constant');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * hexadecimal-constant/hexadecimal-digitの解析
+	 * hex-digitを1文字検出したら本状態へ遷移する。
+	 */
+	private execute_hex_constant_digit(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら終了
+			this.id = 'hex_constant';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char.match(this.regex_hex_digit)) {
+				// hex-digitが続けば解析継続
+				//this.state = '@hex_constant_digit';
+				this.forward_pos();
+			} else if (char == ".") {
+				// . が続けばhexadecimal-fractional-constant解析へ遷移
+				this.state = '@hex_fractional_constant';
+				this.forward_pos();
+			} else if (char == "p" || char == "P") {
+				// p or P が続けばexponent-part解析へ遷移 
+				this.state = '@binary_exponent_part';
+				this.forward_pos();
+			} else if (char.match(this.regex_int_suffix)) {
+				// int-suffixが続けばtoken区切りに到達することを確認する
+				// hex検出からのsuffix解析へ遷移を判定するためにidをセットしておく
+				this.id = 'hex_constant';
+				this.state = '@int_suffix';
+			} else if (char.match(this.regex_punctuator)) {
+				// 区切り文字が続けば終了
+				this.id = 'hex_constant';
+				this.state = '@end';
+				result = true;
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'hex_constant');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * integer-suffixの解析
+	 * posを更新しないで遷移すること。
+	 * long-long-suffix検出のために最初から解析する。
+	 */
+	private execute_int_suffix(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			// 前提条件からこのパスはありえない
+			// idは遷移元で設定済み
+			//this.id;
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char == "u" || char == "U") {
+				// unsigned-suffixが出現したらlong-suffix解析へ遷移
+				this.state = '@long_suffix';
+				this.forward_pos();
+			} else if (char == "l" || char == "L") {
+				// long-suffixが出現したらlong-long-suffixをチェックする
+				this.sub_id = 'long';
+				this.forward_pos();
+				// 1文字先読み
+				[subst_str, subst_len] = this.get_ahead(1);
+				if (subst_str == "l" || "L") {
+					// long-long-suffixが出現したら文字を消化して次へ
+					this.sub_id = 'long_long';
+					this.forward_pos();
+				}
+				this.state = '@unsigned_suffix';
+			} else if (char.match(this.regex_punctuator)) {
+				// 区切り文字が続けば終了
+				// idは遷移元で設定済み
+				//this.id;
+				this.state = '@end';
+				result = true;
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'int_suffix');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * long-suffixの解析
+	 * unsigned-suffixを検出した後に本状態へ遷移する
+	 * unsignedの後ろのlong(-long)-suffixを検出する
+	 */
+	private execute_long_suffix(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			// idは遷移元で設定済み
+			//this.id;
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char == "l" || char == "L") {
+				// long-suffixが出現したらlong-long-suffixをチェックする
+				this.sub_id = 'unsigned_long';
+				this.forward_pos();
+				// 1文字先読み
+				[subst_str, subst_len] = this.get_ahead(1);
+				if (subst_str == "l" || "L") {
+					// long-long-suffixが出現したら文字を消化して次へ
+					this.sub_id = 'unsigned_long_long';
+					this.forward_pos();
+				}
+				// token終端判定
+				let check :boolean;
+				check = this.check_token_terminal();
+				if (check) {
+					// 終端に達していたら正常終了
+					this.state = '@end';
+					result = true;
+				} else {
+					// 文法エラー：規定外の文字が続いた
+					this.state = '@identifier';
+					this.commit_err(this.pos - 1, 'int_suffix');
+				}
+			} else if (char.match(this.regex_punctuator)) {
+				// 区切り文字が続けば終了
+				// idは遷移元で設定済み
+				//this.id;
+				this.state = '@end';
+				result = true;
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'int_suffix');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * unsigned-suffixの解析
+	 * long(-long)-suffixを検出した後に本状態へ遷移する
+	 * long(-long)の後ろのunsigned-suffixを検出する
+	 */
+	private execute_unsigned_suffix(): boolean {
+		let result: boolean;
+		result = false;
+
+		// EOF到達していたら終了
+		if (this.is_eof) {
+			// idは遷移元で設定済み
+			//this.id;
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char == "u" || char == "U") {
+				// unsigned-suffixが出現したらtoken終端判定
+				if (this.sub_id == 'long') {
+					this.sub_id = "unsigned_long";
+				} else {
+					this.sub_id = 'unsigned_long_long';
+				}
+				this.forward_pos();
+				// token終端判定
+				let check: boolean;
+				check = this.check_token_terminal();
+				if (check) {
+					// 終端に達していたら正常終了
+					this.state = '@end';
+					result = true;
+				} else {
+					// 文法エラー：規定外の文字が続いた
+					this.state = '@identifier';
+					this.commit_err(this.pos - 1, 'int_suffix');
+				}
+			} else if (char.match(this.regex_punctuator)) {
+				// 区切り文字が続けば終了
+				// idは遷移元で設定済み
+				//this.id;
+				this.state = '@end';
+				result = true;
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'int_suffix');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * fractional-constantの解析
+	 * "."検出後に本状態へ遷移する。
+	 */
+	private execute_fractional_constant(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら終了
+			this.id = 'decimal_float_constant';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char.match(this.regex_digit)) {
+				// digitが続けばfractional-constant解析継続
+				// this.state = '@fractional_constant';
+				this.forward_pos();
+			} else if (char == "e" || char == "E") {
+				// e or E が続けばexponent-part解析へ遷移 
+				this.state = '@exponent_part';
+				this.forward_pos();
+			} else if (char.match(this.regex_float_suffix)) {
+				// float-suffixが続けばtoken終端判定
+				this.id = 'decimal_float_constant'
+				this.forward_pos();
+				// token終端判定
+				let check: boolean;
+				check = this.check_token_terminal();
+				if (check) {
+					// 終端に達していたら正常終了
+					this.state = '@end';
+					result = true;
+				} else {
+					// 文法エラー：規定外の文字が続いた
+					this.state = '@identifier';
+					this.commit_err(this.pos - 1, 'float_suffix');
+				}
+			} else if (char.match(this.regex_punctuator)) {
+				// 区切り文字が続けば終了
+				this.id = 'decimal_float_constant';
+				this.state = '@end';
+				result = true;
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'decimal_float_constant');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * exponent-partの解析
+	 * e,Eが見つかったときに本状態に遷移する。
+	 * digitが出現しなかった場合のエラーは本状態内で検出する。
+	 */
+	private execute_exponent_part(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら文法エラー
+			this.id = 'decimal_float_constant';
+			this.state = '@end';
+			result = true;
+			this.commit_err(this.pos - 1, 'float_exponent');
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char.match(this.regex_digit)) {
+				// digitが続けばexponent-part/digit-sequence解析
+				this.state = '@exponent_part_digit';
+				this.forward_pos();
+			} else if (char == "+" || char == "-") {
+				// + or - が続けば、この処理内でdigit判定まで実施する 
+				this.forward_pos();
+				// 1文字先読み(EOFのケアとして先読み関数を使う)
+				[subst_str, subst_len] = this.get_ahead(1);
+				if (subst_str.match(this.regex_digit)) {
+					this.state = '@exponent_part_digit';
+					this.forward_pos();
+				} else {
+					// 文法エラー：digitが出現しなかった
+					this.state = '@identifier';
+					this.commit_err(this.pos - 1, 'float_exponent');
+				}
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'float_exponent');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * exponent-part/digit-sequenceの解析
+	 * digitの1文字目まで検出してから本状態に遷移する。
+	 */
+	private execute_exponent_part_digit(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら終了
+			this.id = 'decimal_float_constant';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char.match(this.regex_digit)) {
+				// digitが続けば解析継続
+				// this.state = '@exponent_part_digit';
+				this.forward_pos();
+			} else if (char.match(this.regex_float_suffix)) {
+				// float-suffixが続けばtoken終端判定
+				this.id = 'decimal_float_constant'
+				this.forward_pos();
+				// token終端判定
+				let check: boolean;
+				check = this.check_token_terminal();
+				if (check) {
+					// 終端に達していたら正常終了
+					this.state = '@end';
+					result = true;
+				} else {
+					// 文法エラー：規定外の文字が続いた
+					this.state = '@identifier';
+					this.commit_err(this.pos - 1, 'float_suffix');
+				}
+			} else if (char.match(this.regex_punctuator)) {
+				// 区切り文字が続けば終了
+				this.id = 'decimal_float_constant';
+				this.state = '@end';
+				result = true;
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'float_exponent');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * hexadecimal-fractional-constantの解析
+	 * "."検出後に本状態へ遷移する。
+	 */
+	private execute_hex_fractional_constant(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら終了
+			this.id = 'hex_float_constant';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char.match(this.regex_hex_digit)) {
+				// hex-digitが続けば解析継続
+				//this.state = '@hex_fractional_constant';
+				this.forward_pos();
+			} else if (char == "p" || char == "P") {
+				// e or E が続けばbinary-exponent-part解析へ遷移 
+				this.state = '@binary_exponent_part';
+				this.forward_pos();
+			} else if (char.match(this.regex_float_suffix)) {
+				// float-suffixが続けばtoken終端判定
+				this.id = 'hex_float_constant'
+				this.forward_pos();
+				// token終端判定
+				let check: boolean;
+				check = this.check_token_terminal();
+				if (check) {
+					// 終端に達していたら正常終了
+					this.state = '@end';
+					result = true;
+				} else {
+					// 文法エラー：規定外の文字が続いた
+					this.state = '@identifier';
+					this.commit_err(this.pos - 1, 'float_suffix');
+				}
+			} else if (char.match(this.regex_punctuator)) {
+				// 区切り文字が続けば終了
+				this.id = 'hex_float_constant';
+				this.state = '@end';
+				result = true;
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'hex_float_constant');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * binary-exponent-partの解析
+	 * p,Pが見つかったときに本状態に遷移する。
+	 * digitが出現しなかった場合のエラーは本状態内で検出する。
+	 */
+	private execute_binary_exponent_part(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら文法エラー
+			this.id = 'hex_float_constant';
+			this.state = '@end';
+			result = true;
+			this.commit_err(this.pos - 1, 'binary_float_exponent');
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char.match(this.regex_digit)) {
+				// digitが続けばbinary-exponent-part/digit-sequence解析
+				this.state = '@binary_exponent_part_digit';
+				this.forward_pos();
+			} else if (char == "+" || char == "-") {
+				// + or - が続けば、この処理内でdigit判定まで実施する 
+				this.forward_pos();
+				// 1文字先読み(EOFのケアとして先読み関数を使う)
+				[subst_str, subst_len] = this.get_ahead(1);
+				if (subst_str.match(this.regex_digit)) {
+					this.state = '@binary_exponent_part_digit';
+					this.forward_pos();
+				} else {
+					// 文法エラー：digitが出現しなかった
+					this.state = '@identifier';
+					this.commit_err(this.pos - 1, 'binary_float_exponent');
+				}
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'binary_float_exponent');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * binary-exponent-part/digit-sequenceの解析
+	 * digitの1文字目まで検出してから本状態に遷移する。
+	 */
+	private execute_binary_exponent_part_digit(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら終了
+			this.id = 'hex_float_constant';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char.match(this.regex_digit)) {
+				// digitが続けば解析継続
+				// this.state = '@binary_exponent_part_digit';
+				this.forward_pos();
+			} else if (char.match(this.regex_float_suffix)) {
+				// float-suffixが続けばtoken終端判定
+				this.id = 'hex_float_constant'
+				this.forward_pos();
+				// token終端判定
+				let check: boolean;
+				check = this.check_token_terminal();
+				if (check) {
+					// 終端に達していたら正常終了
+					this.state = '@end';
+					result = true;
+				} else {
+					// 文法エラー：規定外の文字が続いた
+					this.state = '@identifier';
+					this.commit_err(this.pos - 1, 'float_suffix');
+				}
+			} else if (char.match(this.regex_punctuator)) {
+				// 区切り文字が続けば終了
+				this.id = 'hex_float_constant';
+				this.state = '@end';
+				result = true;
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'binary_float_exponent');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * (hexadecimal-)fractional-constantの解析
+	 * "."から開始してhex-digitが続いた場合に本状態へ遷移する。
+	 * token解析しながら10/16進数を判別する。
+	 * "."に続く1文字目から解析開始する。
+	 */
+	private execute_any_fractional_constant(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら終了
+			this.id = 'dot';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char.match(this.regex_digit)) {
+				// digitが続けば解析継続
+				//this.state = '@any_fractional_constant';
+				this.forward_pos();
+			} else if (char.match(this.regex_hex_digit)) {
+				// hex-digitが続けばhexadecimal-fractional-constantが確定するので遷移
+				this.state = '@hex_fractional_constant';
+				this.forward_pos();
+			} else if (char == "e" || char == "E") {
+				// e or E が続けばbinary-exponent-part解析へ遷移 
+				this.state = '@exponent_part';
+				this.forward_pos();
+			} else if (char == "p" || char == "P") {
+				// p or P が続けばbinary-exponent-part解析へ遷移 
+				this.state = '@binary_exponent_part';
+				this.forward_pos();
+			} else if (char.match(this.regex_float_suffix)) {
+				// float-suffixが続けばtoken終端判定
+				// このパスを通る時点で10/16進数の判定ができなかったということなので、
+				// ここにたどり着いた時点でどちらと見ても問題なく、10進数と判断する。
+				this.id = 'decimal_float_constant';
+				this.forward_pos();
+				// token終端判定
+				let check: boolean;
+				check = this.check_token_terminal();
+				if (check) {
+					// 終端に達していたら正常終了
+					this.state = '@end';
+					result = true;
+				} else {
+					// 文法エラー：規定外の文字が続いた
+					this.state = '@identifier';
+					this.commit_err(this.pos - 1, 'float_suffix');
+				}
+			} else if (char.match(this.regex_punctuator)) {
+				// 区切り文字が続けば終了
+				this.id = 'decimal_float_constant';
+				this.state = '@end';
+				result = true;
+			} else {
+				// 文法エラー：規定外の文字が続いた
+				this.state = '@identifier';
+				this.commit_err(this.pos - 1, 'decimal_float_constant');
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * character-constantの1文字目解析
+	 * 'まで出現した状態から遷移する。
+	 * 'に'が続く場合は文法エラーになる。
+	 */
+	private execute_char_constant_begin(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら文法エラー
+			this.id = 'char_constant';
+			this.state = '@end';
+			result = true;
+			this.commit_err(this.pos - 1, 'char_constant');
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char == "'") {
+				// 文法エラー：''(空character-constant)
+				this.id = 'char_constant';
+				this.state = '@end';
+				result = true;
+				this.commit_err(this.pos - 1, 'char_constant');
+				this.forward_pos();
+			} else {
+				// '以外であればchar_constantへ遷移する
+				this.state = '@char_constant';
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * character-constantの解析
+	 * 'の後に'以外の文字が続いた状態で本状態へ遷移する。
+	 */
+	private execute_char_constant(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら文法エラー
+			this.id = 'char_constant';
+			this.state = '@end';
+			result = true;
+			this.commit_err(this.pos - 1, 'char_constant');
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char == "'") {
+				// 'が出現したら解析完了
+				this.id = 'char_constant';
+				this.state = '@end';
+				result = true;
+				this.forward_pos();
+			} else if (char == "\\") {
+				// '\'が出現したらescape-sequence解析開始
+				// 解析エラーが出てもchar-constantとして解析継続する
+				this.forward_pos();
+				let err_check: boolean;
+				err_check = this.check_escape_sequence();
+			} else if (char == "\r" || char == "\n") {
+				// 改行文字が出現したら解析打ち切り
+				this.id = 'char_constant';
+				this.state = '@end';
+				result = true;
+				this.commit_err(this.pos - 1, 'char_constant');
+			} else {
+				// その他の文字はすべて許容する、解析継続
+				this.forward_pos();
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * string-literalの解析
+	 * "を検出した状態で本状態へ遷移する。
+	 */
+	private execute_string_literal(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// EOF到達していたら文法エラー
+			this.id = 'string_literal';
+			this.state = '@end';
+			result = true;
+			this.commit_err(this.pos - 1, 'string_literal');
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+
+			if (char == '"') {
+				// "が出現したら解析完了
+				this.id = 'string_literal';
+				this.state = '@end';
+				result = true;
+				this.forward_pos();
+			} else if (char == "\\") {
+				// '\'が出現したらescape-sequence解析開始
+				// 解析エラーが出てもchar-constantとして解析継続する
+				this.forward_pos();
+				let err_check: boolean;
+				err_check = this.check_escape_sequence();
+			} else if (char == "\r" || char == "\n") {
+				// 改行文字が出現したら解析打ち切り
+				this.id = 'char_constant';
+				this.state = '@end';
+				result = true;
+				this.commit_err(this.pos - 1, 'char_constant');
+			} else {
+				// その他の文字はすべて許容する、解析継続
+				this.forward_pos();
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * '+'から始まるtokenの解析
+	 */
+	private execute_plus(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'plus';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとなる
+			switch (char) {
+				case '+':
+					this.id = 'increment_op';
+					this.forward_pos();
+					break;
+				case '=':
+					this.id = 'add_assign_op';
+					this.forward_pos();
+					break;
+				default:
+					this.id = 'plus';
+					break;
+			}
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * '-'から始まるtokenの解析
+	 */
+	private execute_minus(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'minus';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとなる
+			switch (char) {
+				case '>':
+					this.id = 'arrow_op';
+					this.forward_pos();
+					break;
+				case '-':
+					this.id = 'decrement_op';
+					this.forward_pos();
+					break;
+				case '=':
+					this.id = 'sub_assign_op';
+					this.forward_pos();
+					break;
+				default:
+					this.id = 'minus';
+					break;
+			}
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * '&'から始まるtokenの解析
+	 */
+	private execute_ampersand(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'ampersand';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとなる
+			switch (char) {
+				case '&':
+					this.id = 'logical_AND_op';
+					this.forward_pos();
+					break;
+				case '=':
+					this.id = 'bitwise_AND_assign_op';
+					this.forward_pos();
+					break;
+				default:
+					this.id = 'ampersand';
+					break;
+			}
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * '*'から始まるtokenの解析
+	 */
+	private execute_asterisk(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'asterisk';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとなる
+			switch (char) {
+				case '=':
+					this.id = 'mul_assign_op';
+					this.forward_pos();
+					break;
+				default:
+					this.id = 'asterisk';
+					break;
+			}
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * '!'から始まるtokenの解析
+	 */
+	private execute_exclamation(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'logical_negation_op';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとなる
+			switch (char) {
+				case '=':
+					this.id = 'inequal_op';
+					this.forward_pos();
+					break;
+				default:
+					this.id = 'logical_negation_op';
+					break;
+			}
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * '/'から始まるtokenの解析
+	 */
+	private execute_slash(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'logical_negation_op';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとする
+			switch (char) {
+				case '=':
+					this.id = 'inequal_op';
+					this.forward_pos();
+					this.sub_id = 'punctuator';
+					this.state = '@end';
+					result = true;
+					break;
+				case '/':
+					// 1line comment delimiter
+					this.forward_pos();
+					this.state = '@COMMENT_1LINE';
+					break;
+				case '*':
+					// multiline comment delimiter
+					this.forward_pos();
+					this.state = '@COMMENT_MULTILINE';
+					break;
+				default:
+					this.id = 'logical_negation_op';
+					this.sub_id = 'punctuator';
+					this.state = '@end';
+					result = true;
+					break;
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * '%'から始まるtokenの解析
+	 */
+	private execute_percent(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'remain_op';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとなる
+			switch (char) {
+				case '=':
+					this.id = 'remain_assign_op';
+					this.forward_pos();
+					break;
+				case '>':
+					this.id = 'alt_right_brace';
+					this.forward_pos();
+					break;
+				case ':':
+					this.id = 'alt_sharp';
+					this.forward_pos();
+					// 2文字先読み
+					// %:が続いた場合は%:%:になる
+					// これらの記号はすべて区切り文字なので、
+					// ほかの文字が出現したケースは次回解析でよい
+					[subst_str, subst_len] = this.get_ahead(2);
+					if (subst_str == "%:") {
+						this.id = 'alt_sharp_sharp_op';
+						this.forward_pos(subst_len);
+					}
+					break;
+				default:
+					this.id = 'remain_op';
+					break;
+			}
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * '<'から始まるtokenの解析
+	 */
+	private execute_left_angle_bracket(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'lt_op';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとなる
+			switch (char) {
+				case '<':
+					this.id = 'left_shift_op';
+					this.forward_pos();
+					// 1文字先読み
+					[subst_str, subst_len] = this.get_ahead(2);
+					if (subst_str == "=") {
+						this.id = 'left_shift_assign_op';
+						this.forward_pos();
+					}
+					break;
+				case '=':
+					this.id = 'lte_op';
+					this.forward_pos();
+					break;
+				case ':':
+					this.id = 'alt_left_bracket';
+					this.forward_pos();
+					break;
+				case '%':
+					this.id = 'alt_left_brace';
+					this.forward_pos();
+					break;
+				default:
+					this.id = 'lt_op';
+					break;
+			}
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * '>'から始まるtokenの解析
+	 */
+	private execute_right_angle_bracket(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'gt_op';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとなる
+			switch (char) {
+				case '>':
+					this.id = 'right_shift_op';
+					this.forward_pos();
+					// 1文字先読み
+					[subst_str, subst_len] = this.get_ahead(2);
+					if (subst_str == "=") {
+						this.id = 'right_shift_assign_op';
+						this.forward_pos();
+					}
+					break;
+				case '=':
+					this.id = 'gte_op';
+					this.forward_pos();
+					break;
+				default:
+					this.id = 'gt_op';
+					break;
+			}
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * '='から始まるtokenの解析
+	 */
+	private execute_equal(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'simple_assign_op';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとなる
+			switch (char) {
+				case '=':
+					this.id = 'equal_op';
+					this.forward_pos();
+					break;
+				default:
+					this.id = 'simple_assign_op';
+					break;
+			}
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * '^'から始まるtokenの解析
+	 */
+	private execute_caret(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'bitwise_EXOR_op';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとなる
+			switch (char) {
+				case '=':
+					this.id = 'bitwise_EXOR_assign_op';
+					this.forward_pos();
+					break;
+				default:
+					this.id = 'bitwise_EXOR_op';
+					break;
+			}
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * '|'から始まるtokenの解析
+	 */
+	private execute_vertical_bar(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'bitwise_OR_op';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとなる
+			switch (char) {
+				case '|':
+					this.id = 'logical_OR_op';
+					this.forward_pos();
+					break;
+				case '=':
+					this.id = 'bitwise_OR_assign_op';
+					this.forward_pos();
+					break;
+				default:
+					this.id = 'bitwise_OR_op';
+					break;
+			}
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * ':'から始まるtokenの解析
+	 */
+	private execute_colon(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'colon';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとなる
+			switch (char) {
+				case '>':
+					this.id = 'alt_right_bracket';
+					this.forward_pos();
+					break;
+				default:
+					this.id = 'colon';
+					break;
+			}
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * '#'から始まるtokenの解析
+	 */
+	private execute_sharp(): boolean {
+		let result: boolean;
+		result = false;
+
+		if (this.is_eof) {
+			// 1文字だけなら区切り文字
+			this.id = 'sharp';
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		} else {
+			// 次の文字を取得
+			let char: string;
+			char = this.text[this.pos];
+			// 区切り文字なので規定外の文字が登場しても別tokenとなる
+			switch (char) {
+				case '#':
+					this.id = 'sharp_sharp';
+					this.forward_pos();
+					break;
+				default:
+					this.id = 'sharp';
+					break;
+			}
+			this.sub_id = 'punctuator';
+			this.state = '@end';
+			result = true;
+		}
+
+		return result;
+	}
+
+
+
+
+
+	/**
+	 * escape-sequence解析
+	 * c-char-sequenceとs-char-sequenceで共通処理のため
+	 * 関数内でposを進めていく。例外的なロジックなので注意。
+	 */
+	private check_escape_sequence(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		// 1文字先読み(EOFのケアとして先読み関数を使う)
+		[subst_str, subst_len] = this.get_ahead(1);
+
+		if (subst_str == "") {
+			// '\'で終了時は文法エラー
+			this.commit_err(this.pos - 1, 'escape_sequence');
+			result = true;
+		} else if (subst_str.match(this.regex_simple_escape_seq)) {
+			// simple-escape-sequenceが登場したら正常終了
+			this.forward_pos();
+		} else if (subst_str.match(this.regex_octal_digit)) {
+			// octal-digitが登場したら octal-escape-sequence として解析
+			// octal-escape-sequenceでは1～3文字までoctal-digitが登場する
+			let char_count: number;
+			char_count = 0;
+			do {
+				char_count++;
+				this.forward_pos(1);
+				// 1文字先読み(EOFのケアとして先読み関数を使う)
+				[subst_str, subst_len] = this.get_ahead(1);
+			} while (subst_str.match(this.regex_octal_digit) && char_count < 3);
+		} else if (subst_str == "x") {
+			// "x"が出現したら hexadecimal-escape-sequence として解析
+			// 1文字先読み(EOFのケアとして先読み関数を使う)
+			this.forward_pos(1);
+			[subst_str, subst_len] = this.get_ahead(1);
+			if (subst_str.match(this.regex_hex_digit)) {
+				// hex-digitが出現したら hexadecimal-escape-sequence を正常検出
+				do {
+					// 1文字先読み(EOFのケアとして先読み関数を使う)
+					this.forward_pos(1);
+					[subst_str, subst_len] = this.get_ahead(1);
+				} while (subst_str.match(this.regex_hex_digit));
+			} else {
+				// 文法エラー：hex-digit以外が出現した
+				result = true;
+				this.commit_err(this.pos - 1, 'hex_escape_sequence');
+			}
+		} else if (subst_str == "u" || subst_str == "U") {
+			// u or U が出現した場合、
+			// universal-character-nameの判定を行う。
+			// 解析エラーが出てもescape-sequenceとして解析継続
+			let check : boolean;
+			check = this.check_univ_char_name();
+			if (check) {
+				// エラー検出時
+				// result = false;	// 解析継続
+			}
+		} else {
+			// その他の文字が出現した場合は解析エラー
+			result = true;
+			this.commit_err(this.pos - 1, 'escape_sequence');
+		}
+
+		return result;
+	}
+
+	/**
+	 * universal-character-name解析
+	 * identifier/c-char-sequence/s-char-sequenceで共通処理のため
+	 * 関数内でposを進めていく。例外的なロジックなので注意。
+	 */
+	private check_univ_char_name(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		// 1文字先読み(EOFのケアとして先読み関数を使う)
+		[subst_str, subst_len] = this.get_ahead(1);
+
+		if (subst_str == 'u') {
+			this.forward_pos();
+			// '\u'にはhex-quad(4バイト)が続く
+			[subst_str, subst_len] = this.get_ahead(4);
+			if (subst_str.match(/[0-9a-fA-F]{4,4}/)) {
+				this.forward_pos(subst_len);
+			} else {
+				// 文法エラー：'\u'にhex-quadが4つ続かない
+				this.commit_err(this.pos - 2, 'univ_char_name');
+				result = true;
+			}
+		} else if (subst_str == 'U') {
+			this.forward_pos();
+			// '\U'にはhex-quad(4バイト)*2が続く
+			[subst_str, subst_len] = this.get_ahead(8);
+			if (subst_str.match(/[0-9a-fA-F]{8,8}/)) {
+				this.forward_pos(subst_len);
+			} else {
+				// 文法エラー：'\u'にhex-quadが8つ続かない
+				this.commit_err(this.pos - 2, 'univ_char_name');
+				result = true;
+			}
+		} else {
+			// 文法エラー：'\'にuまたはUが続かない
+			this.commit_err(this.pos - 1, 'univ_char_name');
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * token終端解析
+	 * tokenが終端に達していることを判定する。
+	 * 本状態へ遷移する際はIDを設定しておくこと。
+	 * 
+	 * @returns	true	終端に達した
+	 * 			false	終端に達していない
+	 */
+	private check_token_terminal(): boolean {
+		let subst_str: string;
+		let subst_len: number;
+		let result: boolean;
+		result = false;
+
+		// 1文字先読み(EOFのケアとして先読み関数を使う)
+		[subst_str, subst_len] = this.get_ahead(1);
+
+		if (subst_str == "") {
+			// EOFに到達していた
+			result = true;
+		} else if (subst_str.match(this.regex_punctuator)) {
+			// 区切り文字が続けば終了
+			result = true;
+		} else {
+			// 文法エラー：規定外の文字が続いた
+			result = false;
+		}
+
+		return result;
+	}
 
 	/**
 	 * 指定した文字数lenだけ先読みをする。
@@ -1467,6 +3376,7 @@ export default class tokenizer_c implements tokenizer {
 	 */
 	private get_ahead(len:number) : [string, number] {
 		// text文字列長を超える場合はリミットをかける
+		this.ahead_len = len;
 		if ((this.pos + len) > this.text.length) {
 			this.ahead_len = this.text.length - this.pos;
 		}

@@ -1,6 +1,6 @@
 'use strict';
 
-import { token_id } from './token_id';
+import { token_id, token_sub_id } from './token_id';
 import tokenizer from './tokenizer_c';
 
 type cb_type = (row: number, col: number, token: string)=>void;
@@ -13,6 +13,7 @@ interface lexer_token {
 	keyword: boolean;
 	token: string;
 	id: token_id;
+	sub_id: token_sub_id;
 }
 export function dump(token: lexer_token) : string {
 	let result : string;
@@ -24,9 +25,12 @@ export function dump(token: lexer_token) : string {
 	result += ("00000" + token.col).slice(-5);
 	result += ")";
 	result += "[";
-	if (token.keyword) result += "(keyword) ";
-	result += token.token;
+	result += token.id.toString();
+	if (token.sub_id != 'null') result += `(${token.sub_id.toString()})`;
 	result += "]";
+	result += "=\"";
+	result += token.token;
+	result += "\"";
 
 	return result;
 }
@@ -52,7 +56,7 @@ export default class lexer {
 
 	exec(cb ?: cb_type) : lexer_token {
 		let result: lexer_token;
-		result = { pos: 0, row: 0, col: 0, len: 0, keyword: false, token: "", id: 'null' };
+		result = { pos: 0, row: 0, col: 0, len: 0, keyword: false, token: "", id: 'null', sub_id:'null' };
 
 		// 字句解析前情報を作成
 		this.make_info_prelex();
@@ -111,6 +115,7 @@ export default class lexer {
 
 		// token共通
 		token.id = this.token.id;
+		token.sub_id = this.token.sub_id;
 		token.pos = this.token.pos;
 		token.row = this.row;
 		token.col = this.col;
