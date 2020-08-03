@@ -39,11 +39,9 @@
 
 'use strict';
 
-import { token_id, token_sub_id } from './token_id';
+import * as c_token_id from './token_id';
 import { token_err_id } from './token_err_id';
 import { tokenizer, token_error_info} from './tokenizer';
-import lexer from './lexer';
-//import token_error_info from './tokenizer';
 
 /**
  * '@'から始まる状態はkeyword以外のtokenを示す
@@ -336,7 +334,10 @@ export class token_error_info_c implements token_error_info {
 	}
 }
 
-export default class tokenizer_c implements tokenizer {
+export type token_id = c_token_id.token_id;
+export type token_sub_id = c_token_id.token_sub_id;
+
+export class tokenizer_c implements tokenizer<token_id, token_sub_id> {
 	// base class I/F
 	text: string;
 	len: number[];
@@ -420,6 +421,17 @@ export default class tokenizer_c implements tokenizer {
 		if (this.state == '@end') {
 			this.state = '@init';
 		}
+	}
+
+	// 未解析,解析データなし
+	is_null(): boolean {
+		if (this.id == 'null') return true;
+		else return false;
+	}
+	// 改行検出
+	is_newline(): boolean {
+		if (this.id == 'NEWLINE') return true;
+		else return false;
 	}
 
 	exec() : boolean {

@@ -134,15 +134,46 @@ L"\'\"\?\\\a\b\f\n\r\t\v   \0  \77 \012  \xFF \xA0 \xEEEEEEEEEEEEE"
 #else
 	#define FFFFF	1234
 #endif
-
+;
 struct hoge
 {
     int a;
     int b;
 };
-struct hoge hoge_ = {0};
-
+typedef struct hoge foge;
+struct hoge hoge1_ = {0};
+struct hoge hoge2_ = (struct hoge){.a = 1, .b = 2};			// error
+struct hoge *hoge3_ = &((struct hoge){.a = 1, .b = 2});
+foge;
 int main(void) {
+	int *p = (int[]){2, 4};
+	struct hoge hoge2_ = (struct hoge){.a = 1, .b = 2};
 
-    return 0;
+	return 0;
 }
+
+int;
+char;
+// (6.7.1) storage-class-specifier
+typedef;
+extern;
+static;
+auto;
+register;
+// (6.7.5) direct-declarator
+// (6.7.5.2) Array declarators
+// 可変長配列引数用の構文、プロトタイプ宣言でのみ使用可能
+// OK
+int decl_func(int param[*]);
+// NG
+int decl[*];
+int decl_func(int param[*])
+{
+}
+// (6.8) Statements and blocks
+hoge = 0;
+if (hoge == 0) { }
+{
+	if (hoge == 0) { }
+}
+int hogehoge(void);
