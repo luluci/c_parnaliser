@@ -177,3 +177,13 @@ if (hoge == 0) { }
 	if (hoge == 0) { }
 }
 int hogehoge(void);
+;
+int;
+
+// function definition
+int foo(n, p)
+	int n;
+	char p;
+{
+	/* Body of the function */
+}

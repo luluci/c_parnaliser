@@ -130,6 +130,8 @@ type lexer_state =
 	| 'float'
 	| 'fo'
 	| 'for'
+	| 'fa'
+	| 'far'
 	| 'g'
 	| 'go'
 	| 'got'
@@ -147,6 +149,10 @@ type lexer_state =
 	| 'lon'
 	| 'long'
 	| 'L'
+	| 'n'
+	| 'ne'
+	| 'nea'
+	| 'near'
 	| 'r'
 	| 're'
 	| 'reg'
@@ -247,6 +253,14 @@ type lexer_state =
 	| '_Imagina'
 	| '_Imaginar'
 	| '_Imaginary'
+	| '__'
+	| '__f'
+	| '__fa'
+	| '__far'
+	| '__n'
+	| '__ne'
+	| '__nea'
+	| '__near'
 	| '0'
 	| '.'
 	| '-'
@@ -689,7 +703,7 @@ export class tokenizer_c implements tokenizer<token_id, token_sub_id> {
 				result = this.execute_keyword('extern');
 				break;
 			case 'f':
-				result = this.execute_keyword_progress([['l', 'fl'], ['o', 'fo']]);
+				result = this.execute_keyword_progress([['l', 'fl'], ['o', 'fo'], ['a', 'fa']]);
 				break;
 			case 'fl':
 				result = this.execute_keyword_progress([['o', 'flo']]);
@@ -708,6 +722,12 @@ export class tokenizer_c implements tokenizer<token_id, token_sub_id> {
 				break;
 			case 'for':
 				result = this.execute_keyword('for');
+				break;
+			case 'fa':
+				result = this.execute_keyword_progress([['r', 'far']]);
+				break;
+			case 'far':
+				result = this.execute_keyword('__far');
 				break;
 			case 'g':
 				result = this.execute_keyword_progress([['o', 'go']]);
@@ -759,6 +779,18 @@ export class tokenizer_c implements tokenizer<token_id, token_sub_id> {
 				break;
 			case 'L':
 				result = this.execute_L();
+				break;
+			case 'n':
+				result = this.execute_keyword_progress([['e', 'ne']]);
+				break;
+			case 'ne':
+				result = this.execute_keyword_progress([['a', 'nea']]);
+				break;
+			case 'nea':
+				result = this.execute_keyword_progress([['r', 'near']]);
+				break;
+			case 'near':
+				result = this.execute_keyword('__near');
 				break;
 			case 'r':
 				result = this.execute_keyword_progress([['e', 're']]);
@@ -998,7 +1030,7 @@ export class tokenizer_c implements tokenizer<token_id, token_sub_id> {
 				result = this.execute_keyword('while');
 				break;
 			case '_':
-				result = this.execute_keyword_progress([['B', '_B'], ['C', '_C'], ['I', '_I']]);
+				result = this.execute_keyword_progress([['B', '_B'], ['C', '_C'], ['I', '_I'], ['_', '__']]);
 				break;
 			case '_B':
 				result = this.execute_keyword_progress([['o', '_Bo']]);
@@ -1059,6 +1091,30 @@ export class tokenizer_c implements tokenizer<token_id, token_sub_id> {
 				break;
 			case '_Imaginary':
 				result = this.execute_keyword('_Imaginary');
+				break;
+			case '__':
+				result = this.execute_keyword_progress([['f', '__f'], ['n', '__n']]);
+				break;
+			case '__f':
+				result = this.execute_keyword_progress([['a', '__fa']]);
+				break;
+			case '__fa':
+				result = this.execute_keyword_progress([['r', '__far']]);
+				break;
+			case '__far':
+				result = this.execute_keyword('__far');
+				break;
+			case '__n':
+				result = this.execute_keyword_progress([['e', '__ne']]);
+				break;
+			case '__ne':
+				result = this.execute_keyword_progress([['a', '__nea']]);
+				break;
+			case '__nea':
+				result = this.execute_keyword_progress([['r', '__near']]);
+				break;
+			case '__near':
+				result = this.execute_keyword('__near');
 				break;
 			case '0':
 				result = this.execute_0();
@@ -1333,6 +1389,10 @@ export class tokenizer_c implements tokenizer<token_id, token_sub_id> {
 					break;
 				case 'L':
 					this.state = 'L';	// state trans => L
+					// result = false;	// 解析継続
+					break;
+				case 'n':
+					this.state = 'n';	// state trans => n
 					// result = false;	// 解析継続
 					break;
 				case 'r':

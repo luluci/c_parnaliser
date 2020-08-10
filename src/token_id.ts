@@ -123,6 +123,11 @@ export type token_id =
 	| 'pp_pragma'
 	| 'pp_invalid_keyword'
 	| 'pp_token'
+	// 特殊keyword
+	//| 'far'
+	//| 'near'
+	| '__far'					// far, __far
+	| '__near'					// near, __near
 	// null
 	| 'null';
 
