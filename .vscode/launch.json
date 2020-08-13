@@ -12,7 +12,9 @@
                 "<node_internals>/**"
             ],
             //"program": "${workspaceFolder}\\out\\index.js",
-            "program": "${workspaceFolder}\\out\\test\\test.js",
+            //"program": "${workspaceFolder}\\out\\test\\test.js",
+            //"program": "${workspaceFolder}/out/test/test_lexer.js",
+            "program": "${workspaceFolder}/out/test/test_parser.js",
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
             ],

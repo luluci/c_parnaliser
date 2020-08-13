@@ -152,6 +152,11 @@ int main(void) {
 	return 0;
 }
 
+// expressions
+int expression() {
+	1 + 2 * 3 + 4 * 5;
+}
+
 int;
 char;
 // (6.7.1) storage-class-specifier
@@ -171,14 +176,19 @@ int decl_func(int param[*])
 {
 }
 // (6.8) Statements and blocks
-hoge = 0;
-if (hoge == 0) { }
-{
+void state_and_block(void) {
+	int hoge = 0;
 	if (hoge == 0) { }
+	{
+		if (hoge == 0) { }
+	}
+	int hogehoge(void);
+	;
+	switch (hoge) hoge = 0;
+	for (int i=0; i<5; i++) i++;
+	for ( (int i = 0); i < 5; i++) i++;
+	int;
 }
-int hogehoge(void);
-;
-int;
 
 // function definition
 int foo(n, p)

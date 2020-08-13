@@ -16,25 +16,52 @@ type parser_state =
 	| 'root_end'						// translation-unitの解析終了
 	| 'EOF'
 
-	| 'root_id'				// root -> identifier [context? primary-expression, type-specifier, labeled-statement]
-	| 'root_type-name'		// root -> typedef-name [context? declaration-specifier]
-	| 'root_lp'				// root -> left-paren [context? primary-expression, postfix-expression]
-	| 'prim-expr'			// root -> primary-expression
 	// Expressions
-	| 'unary-expr'						// unary-expression
-	| 'unary-expr_sizeof'				// unary-expression/sizeof
-	| 'unary-expr_sizeof_lp_typename'	// unary-expression/sizeof ( type-name
-	| 'expression'						// expression
-	| 'expr_lbracket'					//	-> [
-	| 'expr_lbracket_expr'				//		-> expression
-	| 'expr_lparen'						//	-> ()
-	| 'constant-expression'				// constant-expression
-	| 'assign-expr'						// assignment-expression
+	// 単独で出現するgrammarとしては下記3つのみ
+	//	expression : expr全般、,により複数出現可
+	//	assignment-expression : expr全般、単独のみ
+	//	constant-expression : 定数、assignだけないexpr
+
+	| 'prim-expr'								// primary-expression
+	| 'arg-expr-list'							// argument-expression-list
+	| 'unary-expr'								// unary-expression
+	| 'cast-expr'								// cast-expression
+	| 'mul-expr'								// multiplicative-expression
+	| 'add-expr'								// additive-expression
+	| 'shift-expr'								// shift-expression
+	| 'rel-expr'								// relational-expression
+	| 'equ-expr'								// equality-expression
+	| 'AND-expr'								// AND-expression
+	| 'excl-OR-expr'							// exclusive-OR-expression
+	| 'incl-OR-expr'							// inclusive-OR-expression
+	| 'logi-AND-expr'							// logical-AND-expression
+	| 'logi-OR-expr'							// logical-OR-expression
+	| 'cond-expr'								// conditional-expression
+
+	| 'assign-expr'								// assignment-expression
+	| 'expr'									// expression
+	| 'expr_re'									// expression
+	| 'const-expr'								// constant-expression
+	| 'expr_impl'								// expression
+	| 'expr_impl_re'							// expression
+	| 'expr_impl_re_cond'						//	-> ? expr :
+	| 'expr_impl_term'							// cast-expressionまでの単項を解析
+	| 'expr_impl_term_prim'						//	-> primary-expression
+	| 'expr_impl_term_prim_lb_expr'				//		-> [ expr
+	| 'expr_impl_term_prim_lp_arg_expr_list'	//		-> ( arg-expr-list
+	| 'expr_impl_term_unexpr'					//	-> unary-expression
+	| 'expr_impl_term_lp'						//	-> (
+	| 'expr_impl_term_lp_id'					//		-> identifier
+	| 'expr_impl_term_lp_rp'					//		-> * )
+	| 'expr_impl_term_lp_rp_lb_inilist'			//			-> { initializer-list
+	| 'expr_impl_term_sizeof_lp_rp'				//	-> sizeof ( * )
+	| 'arg_expr_list'							// argument-expression-list
+	| 'arg_expr_list_re'							// argument-expression-list
 	// Declarations
 	| 'declaration'								// declaration
-	| 'decl_decl-spec'							//	-> declaration-specifiers
-	| 'decl_decl-spec_decl'						//		-> declarator
-	| 'decl_decl-spec_decl_init'				//			-> = initializer
+	| 'declaration_decl-spec'					//	-> declaration-specifiers
+	| 'declaration_decl-spec_decl'				//		-> declarator
+	| 'declaration_decl-spec_decl_init'			//			-> = initializer
 	| 'decl-specifiers'							// declaration-specifiers(初回)
 	| 'decl-specifiers_re'						// declaration-specifiers(2回目以降)
 	| 'sq-list'									// specifier-qualifier-list
@@ -59,6 +86,7 @@ type parser_state =
 	| 'parameter-type-list_type'				//	-> declaration-specifiers
 	| 'parameter-type-list_type_lp_decl'		//		-> ( *
 	| 'parameter-type-list_type_lp_rp'			//			-> ( * )
+	| 'parameter-declaration'					// parameter-declaration
 	| 'type-name'								// type-name
 	| 'type-name_sq-list_abst-decl'				// type-name/specifier-qualifier-list -> abstract-declarator
 	| 'type-name_end'							// type-name 解析完了
@@ -75,14 +103,36 @@ type parser_state =
 	| 'initializer-list_design'					// 	-> designator
 	| 'initializer-list_design_lb_const-expr'	// 		-> [ constant-expression
 	| 'initializer-list_init'					//	-> designator(opt) initializer
+	// Statements
+	| 'statement'										// statement
+	| 'statement_case'									//	-> case
+	| 'statement_compound'								// compound-statement
+	| 'statement_compound_lb'							//	-> {
+	| 'statement_expr'									// expression
+	| 'statement_if'									//	-> if ( expr )
+	| 'statement_if_state'								//		-> statement
+	| 'statement_switch'								//	-> switch ( expr )
+	| 'statement_switch_state'							//		-> statement
+	| 'statement_while'									//	-> while ( expr )
+	| 'statement_while_state'							//		-> statement
+	| 'statement_do'									//	-> do statement
+	| 'statement_do_state'								//		-> while ( expr
+	| 'statement_for_lp'								//	-> for (
+	| 'statement_for_lp_id'								//		-> identifier
+	| 'statement_for_lp_t'								//		-> any token
+	| 'statement_for_lp_t_s_expr'						//			-> ; expr
+	| 'statement_for_lp_t_s_expr_s_expr'				//				-> ; expr
+	| 'statement_for_lp_t_s_expr_s_expr_rp_state'		//					-> ) state
+	| 'statement_return'								//	-> return
+	| 'statement_end'									// statement
 	// External definitions
 	| 'func-def'								// function-definition
 	| 'func-def_decl'							//	-> declaration-specifier
 	| 'func-def_decl-spec_decl'					// 		-> declarator
 	| 'func-def_decl-spec_decl@err'				// 		-> declarator(err)
-	| 'func-def_decl-spec_decl_list'			// 			-> declaration-list(opt)
-	| 'func-def_decl-spec_decl_states'			// 				-> compound-statement
 	| 'func-def_end'							// function-definition解析完了
+	// Preprocessing directives
+	| 'pp_group_part'							//
 	//
 	| 'null';				// 初期状態
 
@@ -93,7 +143,11 @@ type parse_context =
 	// Expressions
 	| 'primary-expression'
 	| 'postfix-expression'
+	| 'argument-expression-list'
+	| 'cast-expression'
 	| 'unary-expression'				// unary-expression
+	| 'sizeof'
+	| 'conditional-expression'			// conditional-expression
 	| 'expression'						// expression
 	| 'constant-expression'				// constant-expression
 	| 'assignment-expression'			// assignment-expression
@@ -114,7 +168,8 @@ type parse_context =
 	| 'declarator_func'					// function declarator
 	| 'direct-declarator'				// direct-declarator
 	| 'pointer'							// pointer
-	| 'parameter-type-list'				//
+	| 'parameter-type-list'				// parameter-type-list
+	| 'parameter-declaration'			// parameter-declaration
 	| 'identifier-list'					// identifier-list
 	| 'type-name'
 	| 'abstract-declarator'
@@ -125,7 +180,12 @@ type parse_context =
 	| 'designator'						// designator
 	// Statements
 	| 'statement'						// statement
+	| 'labeled-statement'
+	| 'expression-statement'
 	| 'compound-statement'				// compound-statement
+	| 'selection-statement'
+	| 'iteration-statement'
+	| 'jump-statement'
 	// External definitions
 	| 'function-definition'				// function-definition
 	// Preprocessor directives
@@ -136,11 +196,17 @@ type parse_error_info =
 	| 'unknown_type'							// 未知の型が出現した
 	| 'duplicate_type_specify'					// 2重に型指定された
 	| 'unexpected-token'						// 規定のtokenが出現しなかった
+	| 'not_found_any_token'						// 何かしらのtokenが必要な個所で出現しなかった
 	| 'not_found_declarator'					// declaratorが出現しなかった
+	| 'not_found_left_paren'					// ( が出現すべきコンテキストで出現しなかった
 	| 'not_found_right_paren'					// ) が出現すべきコンテキストで出現しなかった
 	| 'not_found_right_bracket'					// ] が出現すべきコンテキストで出現しなかった
 	| 'not_found_right_brace'					// } が出現すべきコンテキストで出現しなかった
+	| 'not_found_colon'							// conditional-expressionで:が出現しなかった
+	| 'not_found_semicolon'						// ; が出現すべきコンテキストで出現しなかった
+	| 'not_found_while'							// while が出現すべきコンテキストで出現しなかった
 	| 'EOF_in_parse'							// 解析途中でEOF出現
+	| '@logic_error'							// ロジック上ありえないtokenが出現した
 	| 'null';
 
 /** [parse_tree] 構成図
@@ -151,14 +217,15 @@ type parse_error_info =
  *     `+[]
  *      +[]
  */
-type parse_tree_node = {
+export type parse_tree_node = {
 	context: parse_context;
 	child: parse_tree_node[];
 	parent: parse_tree_node | null;
 	lex: lex_info | null;
 	err_info: parse_error_info;
+	is_typedef: boolean;
 }
-type lex_info = {
+export type lex_info = {
 	id: token_id;
 	sub_id: token_sub_id;
 	token: string;
@@ -168,32 +235,55 @@ type lex_info = {
 	pos: number;
 }
 
-export default class parser {
+export class parser {
 	private lexer: lexer<tokenizer_c, token_id, token_sub_id>;
 	private parse_cb?: cb_type;
 	private state: parser_state;
 	// parser解析ツリーもどき
 	private tree: parse_tree_node;				// 解析ツリーもどきroot
+	private token_stack: lex_info[];			// LookAheda用のLexerTokenスタック
 	private tgt_node: parse_tree_node;			// 現コンテキストの解析ツリーもどきへの参照
 	private typedef_tbl: string[];				// ユーザ定義型(typedef)テーブル, struct/unionはtypedefしなければidentifier単独で出現しないため、ここには登録しない
 	private enum_tbl: string[];					// enum定義テーブル
 	private state_stack_tbl: parser_state[];	// parser解析状態スタック：再帰処理をしないための遷移先管理テーブル
 	private is_type_appear: boolean;			// declaration-specifiersの解析内でtype-specifierが出現したかどうかのフラグ
+	private expr_enable_assign: boolean;				// expression解析フラグ：constant?
 
 	constructor(text: string, cb?: cb_type) {
 		this.lexer = new lexer<tokenizer_c, token_id, token_sub_id>(tokenizer_c, text);
 		this.state = 'null';
-		this.tree = this.get_new_node('translation-unit');
+		this.tree = this.get_empty_node('translation-unit');
+		this.token_stack = [];
 		this.tgt_node = this.tree;
 		this.typedef_tbl = [];
 		this.enum_tbl = [];
 		this.state_stack_tbl = [];
 		this.is_type_appear = false;
+		this.expr_enable_assign = true;
 	}
 
-	exec() {
-		// grammar解析
+	/**
+	 * parse実行
+	 * external-declarationを1回の解析単位とする
+	 * EOFに達したらfalseを返す
+	 */
+	public exec(): boolean {
 		this.parse();
+		return (this.state != 'EOF');
+	}
+	public get parse_tree(): parse_tree_node {
+		return this.tgt_node;
+	}
+
+	/**
+	 * parserを初期化
+	 */
+	private parser_init() {
+		// 
+		// 初期状態ではtokenを取得する
+		// 以降は解析内でtokenを解析ツリーに登録するたびに毎回次へ進める
+		this.get_new_token();
+		this.state = 'root';
 	}
 
 	private parse() {
@@ -202,10 +292,7 @@ export default class parser {
 		do {
 			switch (this.state) {
 				case 'null':
-					// 初期状態ではtokenを取得する
-					// 以降は解析内でtokenを解析ツリーに登録するたびに毎回次へ進める
-					this.lexer.exec();
-					this.state = 'root';
+					this.parser_init();
 					finish = false;
 					break;
 
@@ -223,49 +310,73 @@ export default class parser {
 					finish = this.parse_root_end();
 					break;
 
-
-				case 'root_id':
-					finish = this.parse_root_id();
+				// Expressions
+				case 'assign-expr':
+					finish = this.parse_assign_expr();
 					break;
-				case 'root_type-name':
-					finish = this.parse_root_typename();
+				case 'expr':
+					finish = this.parse_expr();
 					break;
-				case 'root_lp':
-					finish = this.parse_root_lp();
+				case 'expr_re':
+					finish = this.parse_expr_re();
 					break;
-				case 'prim-expr':
-					finish = this.parse_prim_expr();
+				case 'const-expr':
+					finish = this.parse_const_expr();
 					break;
-
-				// Expressions 
-				case 'expr_lbracket':
-					finish = this.parse_expr_lbracket();
+				case 'expr_impl':
+					finish = this.parse_expr_impl();
 					break;
-				case 'expr_lbracket_expr':
-					finish = this.parse_postfix_expr_lbracket_exp();
+				case 'expr_impl_re':
+					finish = this.parse_expr_impl_re();
 					break;
-				case 'unary-expr':
-					finish = this.parse_unary_expr();
+				case 'expr_impl_re_cond':
+					finish = this.parse_expr_impl_re_cond();
 					break;
-				case 'unary-expr_sizeof_lp_typename':
-					finish = this.parse_unary_expr_sizeof_lp_typename();
+				case 'expr_impl_term':
+					finish = this.parse_expr_impl_term();
+				case 'expr_impl_term_prim':
+					finish = this.parse_expr_impl_term_prim();
 					break;
-				case 'expression':
-					finish = this.parse_expression();
+				case 'expr_impl_term_prim_lb_expr':
+					finish = this.parse_expr_impl_term_prim_lb_expr();
+					break;
+				case 'expr_impl_term_prim_lp_arg_expr_list':
+					finish = this.parse_expr_impl_term_prim_lp_arg_expr_list();
+					break;
+				case 'expr_impl_term_lp':
+					finish = this.parse_expr_impl_term_lp();
+					break;
+				case 'expr_impl_term_lp_id':
+					finish = this.parse_expr_impl_term_lp_id();
+					break;
+				case 'expr_impl_term_lp_rp':
+					finish = this.parse_expr_impl_term_lp_rp();
+					break;
+				case 'expr_impl_term_lp_rp_lb_inilist':
+					finish = this.parse_expr_impl_term_lp_rp_lb_inilist();
+					break;
+				case 'expr_impl_term_sizeof_lp_rp':
+					finish = this.parse_expr_impl_term_sizeof_lp_rp();
+					break;
+				case 'arg_expr_list':
+					finish = this.parse_arg_expr_list();
+					break;
+				case 'arg_expr_list_re':
+					finish = this.parse_arg_expr_list_re();
 					break;
 
 				// Declarations
 				case 'declaration':
 					finish = this.parse_declaration();
 					break;
-				case 'decl_decl-spec':
-					finish = this.parse_decl_decl_spec();
+				case 'declaration_decl-spec':
+					finish = this.parse_declaration_decl_spec();
 					break;
-				case 'decl_decl-spec_decl':
+				case 'declaration_decl-spec_decl':
 					// declarationの解析からのフロー以外に、
 					// translation-unit解析の中でdeclarationと確定したら直接遷移してくる
 					// 確定するのはここまでtokenが出現した後になる
-					finish = this.parse_decl_decl_spec_decl()
+					finish = this.parse_declaration_decl_spec_decl()
 					break;
 				case 'decl-specifiers':
 					finish = this.parse_decl_specifiers();
@@ -388,6 +499,71 @@ export default class parser {
 					finish = this.parse_initializer_list_init();
 					break;
 
+				// Statements
+				case 'statement':
+					finish = this.parse_statement();
+					break;
+				case 'statement_case':
+					finish = this.parse_statement_case();
+					break;
+				case 'statement_compound':
+					finish = this.parse_statement_compound();
+					break;
+				case 'statement_compound_lb':
+					finish = this.parse_statement_compound_lb();
+					break;
+				case 'statement_expr':
+					finish = this.parse_statement_expr();
+					break;
+				case 'statement_if':
+					finish = this.parse_statement_if();
+					break;
+				case 'statement_if_state':
+					finish = this.parse_statement_if_state();
+					break;
+				case 'statement_switch':
+					finish = this.parse_statement_switch();
+					break;
+				case 'statement_switch_state':
+					finish = this.parse_statement_switch_state();
+					break;
+				case 'statement_while':
+					finish = this.parse_statement_while();
+					break;
+				case 'statement_while_state':
+					finish = this.parse_statement_while_state();
+					break;
+				case 'statement_do':
+					finish = this.parse_statement_do();
+					break;
+				case 'statement_do_state':
+					finish = this.parse_statement_do_state();
+					break;
+				case 'statement_for_lp':
+					finish = this.parse_statement_for_lp();
+					break;
+				case 'statement_for_lp_id':
+					finish = this.parse_statement_for_lp_id();
+					break;
+				case 'statement_for_lp_t':
+					finish = this.parse_statement_for_lp_t();
+					break;
+				case 'statement_for_lp_t_s_expr':
+					finish = this.parse_statement_for_lp_t_s_expr();
+					break;
+				case 'statement_for_lp_t_s_expr_s_expr':
+					finish = this.parse_statement_for_lp_t_s_expr_s_expr();
+					break;
+				case 'statement_for_lp_t_s_expr_s_expr_rp_state':
+					finish = this.parse_statement_for_lp_t_s_expr_s_expr_rp_state();
+					break;
+				case 'statement_return':
+					finish = this.parse_statement_return();
+					break;
+				case 'statement_end':
+					finish = this.parse_statement_end();
+					break;
+
 				// External definitions
 				case 'func-def':
 				case 'func-def_decl':
@@ -406,6 +582,11 @@ export default class parser {
 					finish = this.parse_func_def_end();
 					break;
 
+				// Preprocessing directives
+				case 'pp_group_part':
+					finish = this.parse_pp_group_part();
+					break;
+
 				case 'EOF':
 				default:
 					// 解析終了
@@ -414,15 +595,10 @@ export default class parser {
 			}
 
 			// 一連のgrammarが解析終了したらfinish==trueとなる
-			// 状態遷移の復帰先がスタックされていたら、そちらへ復帰する
+			// 状態遷移の復帰先がスタックされていたらそちらへ復帰して解析継続
 			if (finish) {
-				if (this.state_stack_tbl.length > 0) {
-					let next_state: parser_state | undefined;
+				if (this.switch_old_context()) {
 					finish = false;
-					next_state = this.state_stack_tbl.pop();
-					if (next_state) {
-						this.state = next_state;
-					}
 				}
 			}
 		} while (!finish);
@@ -438,9 +614,12 @@ export default class parser {
 		let finish: boolean;
 		finish = false;
 
+		// 空白をスキップ
+		this.skip_whitespace();
+
 		// 必ずdeclaration-specifiersから始まる。
 		// ただし、pp-directivesの処理をしていないのでここで登場する。
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			// Preprocessor directive
 			case 'pp_define':
 			case 'pp_elif':
@@ -459,279 +638,80 @@ export default class parser {
 				// 1文で終了
 				// 詳細解析はLexer側が未対応
 				// 新規解析ツリーを作成
-				this.push_parse_tree('pp-directive');
+				this.switch_new_context('pp-directive', 'pp_group_part', 'root_end');
 				// 解析ツリーに出現トークンを登録
 				this.push_parse_node('pp-directive');
-				finish = true;
-				break;
-
-			// storage-class-specifier
-			case 'typedef':
-			case 'extern':
-			case 'static':
-			case 'auto':
-			case 'register':
-			// type-qualifier
-			case 'const':
-			case 'restrict':
-			case 'volatile':
-			// function specifier
-			case 'inline':
-				// declaration-specifiers であればroot treeを作成して解析開始
-				this.switch_new_context('@undecided', 'root_decl-spec', 'root_end');
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('declaration-specifier');
-				// type-specifierが未出現
-				this.is_type_appear = false;
-				break;
-
-			// type-specifier
-			case 'void':
-			case 'char':
-			case 'short':
-			case 'int':
-			case 'long':
-			case 'float':
-			case 'double':
-			case 'signed':
-			case 'unsigned':
-			case '_Bool':
-			case '_Complex':
-				// declaration-specifiers であればroot treeを作成して解析開始
-				this.switch_new_context('@undecided', 'root_decl-spec', 'root_end');
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('declaration-specifier');
-				// type-specifierが出現
-				this.is_type_appear = true;
-				break;
-			case 'struct':
-			case 'union':
-				// declaration-specifiers であればroot treeを作成して解析開始
-				this.switch_new_context('@undecided', 'root_decl-spec', 'root_end');
-				// さらに struct or union であれば、struct-or-union-specifierの解析開始
-				this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'root_decl-spec');
-				// type-specifierが出現
-				this.is_type_appear = true;
-				break;
-			case 'enum':
-				// declaration-specifiers であればroot treeを作成して解析開始
-				this.switch_new_context('@undecided', 'root_decl-spec', 'root_end');
-				// enumであれば、enum-specifierの解析開始
-				this.switch_new_context('enum-specifier', 'enum-spec', 'root_decl-spec');
-				// type-specifierが出現
-				this.is_type_appear = true;
-				break;
-
-			case 'identifier':
-				// declaration-specifiers であればroot treeを作成して解析開始
-				this.switch_new_context('@undecided', 'root_decl-spec', 'root_end');
-				// typedefとして定義された型か判定
-				if (this.is_typedef_token()) {
-					// 定義済みであればエラーなし
-					// 解析ツリーに出現トークンを登録
-					this.push_parse_node('declaration-specifier');
-				} else {
-					// 未定義でも型とみなして解析継続
-					// 解析ツリーに出現トークンを登録
-					this.push_parse_node('declaration-specifier', 'unknown_type');
-				}
-				// type-specifierが出現
-				this.is_type_appear = true;
-				break;
-
-			case 'semicolon':
-				// 行頭に;のみは一応受理する
-				// 新規解析ツリーを作成
-				this.push_parse_tree('translation-unit');
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('null');
-				finish = true;
-				break;
-
-			case 'NEWLINE':
-			case 'WHITESPACE':
-			case 'COMMENT':
-				// 空白文字,改行,コメント であれば無視して解析継続
-				// root treeを作成して解析開始
-				this.switch_new_context('@undecided', 'root_decl-spec', 'root_end');
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('declaration-specifier');
 				break;
 
 			case 'EOF':
-				// EOFは意味がないが一応正常終了
-				// 新規解析ツリーを作成
-				this.push_parse_tree('translation-unit');
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('translation-unit');
-				// 解析終了
+				this.state = 'EOF';
 				finish = true;
 				break;
 
 			default:
-				// その他tokenは構文エラー
-				// 新規解析ツリーを作成
-				this.push_parse_tree('translation-unit');
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('translation-unit', 'unexpected-token');
-				//エラー設定
-				this.set_current_context_error('unexpected-token');
-				// 解析終了
-				finish = true;
+				if (this.is_declaration_token()) {
+					// declaration(-specifier)開始tokenであればroot treeを作成して解析開始
+					this.switch_new_context('@undecided', 'root_decl-spec', 'root_end');
+					// function-definition / declaration は declaration-specifier まで共通
+					// declaration-specifierの解析開始
+					this.switch_new_context('declaration-specifier', 'decl-specifiers', 'root_decl-spec');
+				} else {
+					// その他tokenは構文エラー
+					// 新規解析ツリーを作成
+					this.push_parse_tree('translation-unit', 'unexpected-token');
+					// 解析ツリーに出現トークンを登録
+					this.push_parse_node('translation-unit', 'unexpected-token');
+					// 解析終了
+					finish = true;
+				}
 				break;
 		}
 
 		return finish;
 	}
-
 	/**
 	 * translation-unit 解析
-	 * function-definition or declaration の繰り返しになる
+	 * declaration-specifier まで検出した状態から解析開始
 	 */
 	private parse_root_decl_spec(): boolean {
 		let finish: boolean;
 		finish = false;
 
-		// 空白を事前にスキップ
+		// 空白をスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
-			// storage-class-specifier
-			case 'typedef':
-			case 'extern':
-			case 'static':
-			case 'auto':
-			case 'register':
-				// 先頭以外で出現するのはNGか？
-			// type-qualifier
-			case 'const':
-			case 'restrict':
-			case 'volatile':
-			// function specifier
-			case 'inline':
-				// declaration-specifiers であればそのまま解析継続
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('declaration-specifier');
-				break;
-
-			// type-specifier
-			case 'void':
-			case 'char':
-			case 'short':
-			case 'int':
-			case 'long':
-			case 'float':
-			case 'double':
-			case 'signed':
-			case 'unsigned':
-			case '_Bool':
-			case '_Complex':
-				// declaration-specifiers の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
-					// 型出現済みであれば、2回以上出現したので構文エラー
-					// 解析ツリーに出現トークンを登録
-					this.push_parse_node('declaration-specifier', 'duplicate_type_specify');
-				} else {
-					// 未出現であれば問題なし
-					// 解析ツリーに出現トークンを登録
-					this.push_parse_node('declaration-specifier');
-				}
-				// type-specifierが出現
-				this.is_type_appear = true;
-				break;
-			case 'struct':
-			case 'union':
-				// declaration-specifiers の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
-					// 型出現済みであれば、2回以上出現したので構文エラー
-					// struct or union であれば、struct-or-union-specifierの解析開始
-					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'root_decl-spec', 'duplicate_type_specify');
-				} else {
-					// struct or union であれば、struct-or-union-specifierの解析開始
-					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'root_decl-spec');
-				}
-				// type-specifierが出現
-				this.is_type_appear = true;
-				break;
-			case 'enum':
-				// declaration-specifiers の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
-					// struct or union であれば、enum-specifierの解析開始
-					this.switch_new_context('enum-specifier', 'enum-spec', 'root_decl-spec', 'duplicate_type_specify');
-				} else {
-					// struct or union であれば、enum-specifierの解析開始
-					this.switch_new_context('enum-specifier', 'enum-spec', 'root_decl-spec');
-				}
-				// type-specifierが出現
-				this.is_type_appear = true;
-				break;
-
-			case 'identifier':
-				// typedefとして定義された型か判定
-				if (this.is_typedef_token()) {
-					// declaration-specifiers の一連の解析内で型が出現済みか判定
-					if (this.is_type_appear) {
-						// 型定義済み かつ 型出現済みであれば、2回以上出現したので構文エラー
-						// 解析ツリーに出現トークンを登録
-						this.push_parse_node('declaration-specifier', 'duplicate_type_specify');
-					} else {
-						// 型定義済み かつ 未出現であれば問題なし
-						// 解析ツリーに出現トークンを登録
-						this.push_parse_node('declaration-specifier');
-					}
-				} else {
-					// 未定義でも型とみなして解析継続
-					// 解析ツリーに出現トークンを登録
-					this.push_parse_node('declaration-specifier', 'unknown_type');
-					// declaration-specifiers の一連の解析内で型が出現済みか判定
-					if (this.is_type_appear) {
-						// 型未定義 かつ 型出現済みであれば、declaratorとみなして次の解析へ遷移
-						this.switch_new_context('declarator', 'declarator', 'root_decl-spec_declarator');
-					} else {
-						// 型未定義 かつ 未出現であれば型とみなして解析継続
-						this.push_parse_node('declaration-specifier', 'unknown_type');
-					}
-				}
-				// type-specifierが出現
-				this.is_type_appear = true;
-				break;
-
-			case 'left_paren':
-				// ( が出現したらdeclaratorの開始とみなして次の解析へ遷移
-				this.switch_new_context('declarator', 'declarator', 'root_decl-spec_declarator');
-				break;
-
+		switch (this.get_token_id()) {
 			case 'semicolon':
-				// ;によりdeclarationのcontext、declarationの終了となる
+				// ; が出現したらdeclarationとして解析完了
 				this.set_current_context('declaration');
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('declaration');
 				finish = true;
 				break;
 
 			case 'EOF':
-				// EOFは構文エラーとする
-				this.push_error_node('declaration-specifier', 'EOF_in_parse');
-				// contextにエラーを設定
+				// EOF が出現したら構文エラーで終了
 				this.set_current_context_error('EOF_in_parse');
+				this.state = 'EOF';
 				finish = true;
 				break;
 
 			default:
-				// その他tokenは構文エラー
-				// declaratorが出現しなかったものとして解析継続
-				this.push_error_node('declarator', 'not_found_declarator');
-				// contextにエラーを設定
-				this.set_current_context_error('not_found_declarator');
+				// その他tokenが出現
+				if (this.is_declarator_token()) {
+					// declarator開始tokenであれば解析開始
+					this.switch_new_context('declarator', 'declarator', 'root_decl-spec_declarator');
+				} else {
+					// その他は構文エラーで終了
+					this.set_current_context_error('unexpected-token');
+					finish = true;
+				}
 				break;
 		}
 
 		return finish;
 	}
-
 	/**
 	 * translation-unit 解析
-	 * declaration-specifier declarator と続いた後からの解析
+	 * declaration-specifier declarator まで検出した状態から解析開始
 	 * declaratorの内容により、declarationとfunction-definitionの判定が可能
 	 */
 	private parse_root_decl_spec_declarator(): boolean {
@@ -745,11 +725,11 @@ export default class parser {
 		// declaratorが変数宣言だったか関数宣言だったか判定する
 		let prev_ctx: parse_context;
 		prev_ctx = 'null';
-		let { valid, ctx } = this.get_prev_ctx();
+		let { valid, node } = this.get_prev_node_if_not_whitespace();
 		//念のため正常に取得できたかチェック
 		if (valid) {
 			// 直前のtoken/contextによりcontextが確定する
-			switch (ctx) {
+			switch (node!.context) {
 				case 'declarator_var':
 					prev_ctx = 'declarator_var';
 					break;
@@ -758,14 +738,10 @@ export default class parser {
 					break;
 				case 'declarator':
 					// ( が出現した場合スタックしていくのでツリーをたどる
-					let result: { valid: boolean, node?: parse_tree_node };
-					result = this.get_prev_node();
-					while (result.valid && result.node!.context == 'declarator') {
-						result = this.get_prev_node();
-					}
-					// 
-					if (result.valid) {
-						switch (result.node!.context) {
+					let id_node: parse_tree_node | null;
+					id_node = this.get_node_declarator_id(node!);
+					if (id_node) {
+						switch (id_node!.context) {
 							case 'declarator_var':
 								prev_ctx = 'declarator_var';
 								break;
@@ -786,7 +762,7 @@ export default class parser {
 				// 変数宣言であればdeclarationのcontextになる
 				this.set_current_context('declaration');
 				// declaration解析状態へ合流
-				this.state = 'decl_decl-spec_decl';
+				this.state = 'declaration_decl-spec_decl';
 				break;
 			case 'declarator_func':
 				// 変数宣言であればfunction-definitionのcontextになる
@@ -814,152 +790,16 @@ export default class parser {
 	private parse_root_end(): boolean {
 		let finish: boolean;
 		finish = true;
-
+		this.state = 'root';
 		return finish;
 	}
 
-	private parse_root_id(): boolean {
-		let finish: boolean;
-		finish = false;
-
-	/*
-	switch (this.get_curr_token_id()) {
-		case 'identifier':
-			// 型かどうかチェック
-			if (this.is_typedef_token()) {
-				// 型のとき -> type-specifier
-				// 新規解析ツリーを作成
-				this.push_parse_tree('declaration');
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('type-specifier');
-				//
-				this.state = 'root_type-name';
-				finish = false;
-			} else {
-				// 型でないとき -> 型 or identifier なのでコンテキスト未確定で解析継続
-				// 新規解析ツリーを作成
-				this.push_parse_tree('@undecided');
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('@undecided');
-				// コンテキスト未確定で次の解析状態へ
-				this.state = 'root_id';
-				finish = false;
-			}
-			break;
-
-		case 'octal_constant':
-		case 'hex_constant':
-		case 'decimal_constant':
-		case 'decimal_float_constant':
-		case 'hex_float_constant':
-		case 'char_constant':
-		case 'string_literal':
-			// 新規解析ツリーを作成
-			this.push_parse_tree('primary-expression');
-			// 解析ツリーに出現トークンを登録
-			this.push_parse_node('primary-expression');
-			//
-			this.state = 'prim-expr';
-			finish = false;
-			break;
-
-		case 'left_paren':
-			// 新規解析ツリーを作成
-			this.push_parse_tree('@undecided');
-			// 解析ツリーに出現トークンを登録
-			this.push_parse_node('@undecided');
-			//
-			this.state = 'root_lp';
-			finish = false;
-			break;
-
-	}
-	*/
-
-		switch (this.get_curr_token_id()) {
-			case 'left_bracket':
-				// [ が出現したら、postfix-expression構文とみなす
-				// コンテキストはexpressionとなる
-				this.set_current_context('expression');
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('expression');
-				// 
-				this.state = 'expr_lbracket';
-				break;
-			case 'left_paren':
-				// ( が出現したら、postfix-expression構文とみなす
-				// コンテキストはexpressionとなる
-				this.set_current_context('expression');
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('expression');
-				// 
-				this.state = 'expr_lparen';
-				break;
-
-			case 'left_brace':
-			case 'alt_left_brace':
-			case 'alt_left_bracket':
-			case 'dot':
-			case 'arrow_op':
-			case 'increment_op':
-			case 'decrement_op':
-				this.state = ;
-				break;
-
-			case 'identifier':
-				// identifierが出現したら、type-name identifier という構文とみなす
-				// 前回出現のtokenはtype-nameとみなす
-				this.set_prev_node_context(1, 'type-name');
-				// コンテキストはdeclarationとなる
-				this.set_current_context('declaration');
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('declarator');
-				// declarationのコンテキスト開始
-				// type-name identifier の解析の続きから開始
-				this.state = 'decl_type_id';
-				finish = false;
-				break;
-
-			case 'semicolon':
-				// ; が出現したら終了
-				// "typedef-name;" or "expression;" の可能性がある。
-				// "identifier;" は意味がないが許容される。
-				// "typedef-name;" or "expression;" の可能性がある。
-				if (this.is_typedef_token()) {
-					// typedef-nameなら(ただし、#includeを解析していないので不正確)
-					// コンテキストはdeclarationとなる
-					this.set_current_context('declaration');
-					// 解析ツリーに出現トークンを登録
-					this.push_parse_node('typedef-name');
-				} else {
-					// typedef-nameでないなら
-					// コンテキストはexpressionとなる
-					this.set_current_context('expression');
-					// 解析ツリーに出現トークンを登録
-					this.push_parse_node('declarator');
-				}
-				// 解析終了
-				finish = true;
-				break;
-
-			case 'colon':
-				// : が出現した
-				// labeled-statement
-				break;
-
-			case 'asterisk':
-				// identifier * と続いたらdeclaration
-				break;
-
-			default:
-				// 未既定のtokenが出現したら解析終了とする。
-				break;
-		}
-
-		return finish;
-	}
-
-	private parse_expr_lbracket(): boolean {
+	/**
+	 * expression解析
+	 * 演算子の優先順位等は考慮せず、grammarとしてexpressionを構成するtokenを取得する
+	 * 
+	 */
+	private parse_expr(): boolean {
 		let finish: boolean;
 		finish = false;
 
@@ -967,95 +807,390 @@ export default class parser {
 		this.skip_whitespace();
 
 		// expression解析を開始
-		this.switch_new_context('expression', 'expression', 'postfix-expr_lbracket_exp');
+		this.expr_enable_assign = true;
+		this.switch_new_context('expression', 'expr_impl', 'expr_re');
 
 		return finish;
 	}
-
-	private parse_unary_expr(): boolean {
+	/**
+	 * expression解析(2回目)
+	 * 
+	 */
+	private parse_expr_re(): boolean {
 		let finish: boolean;
 		finish = false;
 
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
-			// unary-expression
-			// -> unary-expression
-			case 'increment_op':			// ++
-			case 'decrement_op':			// --
-				// 次の解析へ
-				this.state = 'unary-expr';
+		switch (this.get_token_id()) {
+			case 'comma':
+				// , が出現したら
 				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('unary-expression');
+				this.push_parse_node('expression');
+				// expression解析を開始
+				this.expr_enable_assign = true;
+				this.switch_new_context('expression', 'expr_impl', 'expr_re');
 				break;
 
-			// -> cast-expression
-			case 'ampersand':				// &
-			case 'asterisk':				// *
-			case 'plus':					// +
-			case 'minus':					// -
-			case 'bitwise_complement_op':	// ~
-			case 'logical_negation_op':		// !
-				break;
-
-			// -> unary-expression or type-name
-			case 'sizeof':
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('unary-expression');
-				// sizeofの処理を実施
-				finish = this.parse_unary_expr_sizeof();
-				break;
-		}
-
-		return finish;
-	}
-	private parse_unary_expr_sizeof(): boolean {
-		let finish: boolean;
-		finish = false;
-
-		// 空白を事前にスキップ
-		this.skip_whitespace();
-
-		switch (this.get_curr_token_id()) {
-			case 'left_paren':
-				// ( が登場したら type-name が続く
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('unary-expression');
-				// 継続して次のtokenを解析
-				this.parse_sqlist();
-				// type-name解析を開始
-				this.switch_new_context('unary-expression', 'type-name', 'unary-expr_sizeof_lp_typename');
+			case 'EOF':
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
-				// ( 以外が登場したら unary-expression の解析へ遷移
-				this.state = 'unary-expr';
-				// token登録は実施しない
+				// その他tokenは解析終了
+				finish = true;
 				break;
 		}
 
 		return finish;
 	}
+	/**
+	 * assignment-expression解析
+	 * 演算子の優先順位等は考慮せず、grammarとしてexpressionを構成するtokenを取得する
+	 * expressionとの差異は1回だけで終了する点
+	 */
+	private parse_assign_expr(): boolean {
+		let finish: boolean;
+		finish = false;
 
-	private parse_expression(): boolean {
+		// expression解析を開始
+		this.expr_enable_assign = true;
+		// expression解析(実装)へ遷移
+		this.state = 'expr_impl';
+
+		return finish;
+	}
+	/**
+	 * constant-expression解析
+	 * 演算子の優先順位等は考慮せず、grammarとしてexpressionを構成するtokenを取得する
+	 * assignment-expressionとの差異はassignに関する演算子は不可である点
+	 */
+	private parse_const_expr(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// expression解析を開始
+		this.expr_enable_assign = false;
+		// expression解析(実装)へ遷移
+		this.state = 'expr_impl';
+
+		return finish;
+	}
+	/**
+	 * expression解析(実装)
+	 * 演算子の優先順位等は考慮せず、grammarとしてexpressionを構成するtokenを取得する
+	 * 
+	 */
+	private parse_expr_impl(): boolean {
 		let finish: boolean;
 		finish = false;
 
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		// expression解析を開始
+		this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re');
+
+		return finish;
+	}
+	/**
+	 * expression解析(2回目)
+	 * 
+	 */
+	private parse_expr_impl_re(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		switch (this.get_token_id()) {
+			// multiplicative
+			case 'asterisk':
+			case 'div_op':
+			case 'remain_op':
+			// additive
+			case 'plus':
+			case 'minus':
+			// shift
+			case 'left_shift_op':
+			case 'right_shift_op':
+			// relational
+			case 'lt_op':
+			case 'gt_op':
+			case 'lte_op':
+			case 'gte_op':
+			// equality
+			case 'equal_op':
+			case 'inequal_op':
+			// AND
+			case 'ampersand':
+			// exclusive-OR
+			case 'bitwise_EXOR_op':
+			// inclusive-OR
+			case 'bitwise_OR_op':
+			// logical-AND
+			case 'logical_AND_op':
+			// logical-OR
+			case 'logical_OR_op':
+				// binary-operator
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('expression');
+				// expression解析を開始
+				this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re');
+				break;
+			// conditional
+			case 'conditional_op':
+				// conditional-expression
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('expression');
+				// expression解析を開始
+				this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re_cond');
+				break;
+			// assignment
+			case 'simple_assign_op':
+			case 'mul_assign_op':
+			case 'div_assign_op':
+			case 'remain_assign_op':
+			case 'add_assign_op':
+			case 'sub_assign_op':
+			case 'left_shift_assign_op':
+			case 'right_shift_assign_op':
+			case 'bitwise_AND_assign_op':
+			case 'bitwise_EXOR_assign_op':
+			case 'bitwise_OR_assign_op':
+				if (this.expr_enable_assign) {
+					// 解析ツリーに出現トークンを登録
+					this.push_parse_node('expression');
+					// expression解析を開始
+					this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re');
+				} else {
+					finish = true;
+				}
+				break;
+
+			case 'EOF':
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// その他tokenは解析終了
+				finish = true;
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析(2回目)
+	 * conditiona
+	 */
+	private parse_expr_impl_re_cond(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		switch (this.get_token_id()) {
+			// conditional
+			case 'colon':
+				// conditional-expression
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('expression');
+				// expression解析を開始
+				this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re');
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('conditional-expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// その他tokenは構文エラー
+				this.set_current_context_error('not_found_colon');
+				this.push_error_node('conditional-expression', 'not_found_colon');
+				finish = true;
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * 項を1つ取得する
+	 */
+	private parse_expr_impl_term(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		switch (this.get_token_id()) {
+			// primary-expression
+			case 'identifier':
+				// このcontextで出現するidentifierは変数名
+			case 'octal_constant':
+			case 'hex_constant':
+			case 'decimal_constant':
+			case 'decimal_float_constant':
+			case 'hex_float_constant':
+			case 'char_constant':
+			case 'string_literal':
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('primary-expression');
+				// 解析継続
+				this.state = 'expr_impl_term_prim';
+				break;
+
+			// primary-expression
+			// postfix-expression
+			// cast-expression
+			case 'left_paren':
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('expression');
+				// expression と type-name を判別しないといけないので別処理へ遷移
+				// @undecidedとして解析を開始
+				this.switch_new_context('@undecided', 'expr_impl_term_lp', 'expr_impl_term_lp_rp');
+				break;
+
 			// unary-expression
-			// -> unary-expression
 			case 'increment_op':			// ++
 			case 'decrement_op':			// --
-				// 次の解析へ
-				this.state = 'unary-expr';
 				// 解析ツリーに出現トークンを登録
 				this.push_parse_node('unary-expression');
+				// 解析継続
+				this.state = 'expr_impl_term_unexpr';
 				break;
-			// -> cast-expression
+			case 'ampersand':				// &
+			case 'asterisk':				// *
+			case 'plus':					// +
+			case 'minus':					// -
+			case 'bitwise_complement_op':	// ~
+			case 'logical_negation_op':		// !
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('unary-expression');
+				// 解析継続
+				// this.state
+				break;
+			case 'sizeof':
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('expression');
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.get_token_id() == 'left_paren') {
+					// ( が出現したら expression or type-name
+					// expression と type-name を判別しないといけないので別処理へ遷移
+					// @undecidedとして解析を開始
+					this.switch_new_context('@undecided', 'expr_impl_term_lp', 'expr_impl_term_sizeof_lp_rp');
+				} else {
+					// ( が出現しなければ解析継続
+					this.state = 'expr_impl_term_unexpr';
+				}
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// その他tokenは構文エラー
+				this.set_current_context_error('unexpected-token');
+				this.push_error_node('expression', 'unexpected-token');
+				finish = true;
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * primary-expression まで検出済み
+	 * primary-expressionは1度のみ
+	 * postfix-expressionの解析となる
+	 */
+	private parse_expr_impl_term_prim(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		switch (this.get_token_id()) {
+
+			// postfix-expression
+			case 'left_bracket':			// [
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('postfix-expression');
+				this.switch_new_context('expression', 'expr', 'expr_impl_term_prim_lb_expr');
+				break;
+			case 'left_paren':
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('postfix-expression');
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.get_token_id() != 'right_paren') {
+					// ) 以外が出現したら argument-expression-list 解析実施
+					this.switch_new_context('unary-expression', 'arg_expr_list', 'expr_impl_term_prim_lp_arg_expr_list');
+				} else {
+					// ) が出現したら本contextは終了、そのまま解析継続
+					this.push_parse_node('postfix-expression');
+				}
+				break;
+			case 'dot':
+			case 'arrow_op':
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('postfix-expression');
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.get_token_id() == 'identifier') {
+					// identifierが出現したら解析継続
+					this.push_parse_node('postfix-expression');
+				} else {
+					// その他tokenは構文エラー
+					this.set_current_context_error('unexpected-token');
+					this.push_error_node('postfix-expression', 'unexpected-token');
+					finish = true;
+				}
+				break;
+			case 'increment_op':			// ++
+			case 'decrement_op':			// --
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('unary-expression');
+				// 解析継続
+				//this.state;
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			// primary-expression は1度のみ
+			case 'identifier':
+			case 'octal_constant':
+			case 'hex_constant':
+			case 'decimal_constant':
+			case 'decimal_float_constant':
+			case 'hex_float_constant':
+			case 'char_constant':
+			case 'string_literal':
+			// unary-operator は先頭のみ
 			case 'ampersand':				// &
 			case 'asterisk':				// *
 			case 'plus':					// +
@@ -1063,6 +1198,511 @@ export default class parser {
 			case 'bitwise_complement_op':	// ~
 			case 'logical_negation_op':		// !
 			case 'sizeof':
+			default:
+				// その他tokenが出現で解析終了
+				finish = true;
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * primary-expression [ expression まで検出済み
+	 */
+	private parse_expr_impl_term_prim_lb_expr(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		switch (this.get_token_id()) {
+			case 'right_bracket':			// ]
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('postfix-expression');
+				// 解析継続
+				this.state = 'expr_impl_term_prim';
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('postfix-expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// その他tokenは構文エラー
+				this.set_current_context_error('not_found_right_bracket');
+				this.push_error_node('postfix-expression', 'not_found_right_bracket');
+				// 解析継続
+				this.state = 'expr_impl_term_prim';
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * primary-expression ( argument-expression-list まで検出済み
+	 */
+	private parse_expr_impl_term_prim_lp_arg_expr_list(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		switch (this.get_token_id()) {
+			case 'right_paren':			// )
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('postfix-expression');
+				// 解析継続
+				this.state = 'expr_impl_term_prim';
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('postfix-expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// その他tokenは構文エラー
+				this.set_current_context_error('not_found_right_bracket');
+				this.push_error_node('postfix-expression', 'not_found_right_bracket');
+				// 解析継続
+				this.state = 'expr_impl_term_prim';
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * ( まで検出した後から解析実施
+	 * expression or type-name につながる
+	 */
+	private parse_expr_impl_term_lp(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		//出現しているtokenをチェック
+		let is_typename = this.is_typename_token();
+		let is_expression = this.is_expression_token();
+		if (is_typename && is_expression) {
+			// 両方成立しているとき
+			// 重複はidentifierのみ
+			this.push_parse_node('@undecided');
+			// 次の解析へ状態遷移
+			this.state = 'expr_impl_term_lp_id';
+		} else if (is_typename) {
+			// typename tokenが出現
+			// typename解析状態へ合流
+			this.set_current_context('type-name');
+			this.state = 'type-name';
+		} else if (is_expression) {
+			// expression tokenが出現
+			// expression解析状態へ合流
+			this.set_current_context('expression');
+			this.state = 'expr';
+		} else {
+			// 両方不成立
+			switch (this.get_token_id()) {
+				case 'right_paren':
+					// ) が出現したらカッコ内が空だったら構文エラーで解析終了
+					this.push_error_node('@undecided', 'not_found_any_token');
+					finish = true;
+					break;
+
+				case 'EOF':
+					// EOF が出現したら構文エラーで終了
+					this.set_current_context_error('EOF_in_parse');
+					this.push_error_node('expression', 'EOF_in_parse');
+					this.state = 'EOF';
+					finish = true;
+					break;
+
+				default:
+					// その他tokenは構文エラー
+					// 先読みしてエラー解析するか？
+					finish = true;
+					break;
+			}
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * ( identifier まで検出した後から解析実施
+	 * expression or type-name につながる
+	 */
+	private parse_expr_impl_term_lp_id(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		// ここで未確定でも context を決定する
+		type jdg = 'expr' | 'typename' | 'finish' | 'err';
+		let ctx_jdg: jdg;
+		// 出現しているtokenをチェック
+		switch (this.get_token_id()) {
+			case 'right_paren':
+				// ) が出現したらidentifierが未確定で終了
+				// その先のcontext解析は復帰先で実施
+				ctx_jdg = 'finish';
+				break;
+
+			// 重複
+			case 'left_paren':
+			case 'asterisk':
+				ctx_jdg = 'expr';
+				break;
+
+			// type-name
+			case 'left_bracket':
+				ctx_jdg = 'typename';
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('postfix-expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				ctx_jdg = 'err';
+				break;
+
+			default:
+				// その他token出現時
+				// 重複はチェック済み
+				if (this.is_expression_token()) {
+					// expression tokenが出現
+					ctx_jdg = 'expr';
+				} else {
+					// その他tokenは構文エラー
+					this.set_current_context_error('unexpected-token');
+					ctx_jdg = 'err';
+				}
+				break;
+		}
+
+		switch (ctx_jdg) {
+			case 'expr':
+				// expression解析状態へ合流
+				this.set_current_context('expression');
+				this.expr_enable_assign = true;
+				this.state = 'expr_impl_term_prim';
+				break;
+
+			case 'typename':
+				// このcontextではtypename終了しているので解析終了
+				this.set_current_context('type-name');
+				finish = true;
+				break;
+
+			case 'finish':
+				finish = true;
+				break;
+
+			case 'err':
+			default:
+				finish = true;
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * ( * ) まで検出した後から解析実施
+	 */
+	private parse_expr_impl_term_lp_rp(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ) を登録
+		this.set_current_context('@undecided');
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// 未確定だったidentifierの解析結果に応じて処理を実施
+		type jdg = 'primary' | 'postfix' | 'cast' | 'err';
+		let ctx_jdg: jdg = 'err';
+		let {valid, ctx} = this.get_prev_ctx(2);
+		if (valid) {
+			switch (ctx) {
+				case '@undecided':
+					// ( identifier * ) の解析が未確定で終了した場合、
+					// ここで最終判定を実施する
+					switch (this.get_token_id()) {
+						case 'left_brace':
+							// { が出現したら postfix-expression のcontextだった
+							ctx_jdg = 'postfix';
+							break;
+						default:
+							// その他tokenはprimary-expressionだったとみなす
+							ctx_jdg = 'primary';
+							break;
+					}
+					break;
+
+				case 'expression':
+					// primary-expressionだった
+					ctx_jdg = 'primary';
+					break;
+
+				case 'type-name':
+					switch (this.get_token_id()) {
+						case 'left_brace':
+							// { が出現したら postfix-expression のcontextだった
+							ctx_jdg = 'postfix';
+							break;
+						default:
+							// その他tokenはcast-expressionだったとみなす
+							ctx_jdg = 'cast';
+							break;
+					}
+					break;
+
+				default:
+					// その他はロジックエラー
+					ctx_jdg = 'err';
+					break;
+			}
+		} else {
+			// contextを取得できないのは構文エラー
+		}
+
+		switch (ctx_jdg) {
+			case 'primary':
+				this.set_prev_node_context(3, 'primary-expression');
+				this.set_prev_node_context(2, 'expression');
+				this.set_prev_node_context(1, 'primary-expression');
+				// 次の解析へ遷移
+				this.state = 'expr_impl_term_prim';
+				break;
+
+			case 'postfix':
+				this.set_prev_node_context(3, 'postfix-expression');
+				this.set_prev_node_context(2, 'type-name');
+				this.set_prev_node_context(1, 'postfix-expression');
+				// { を登録
+				this.set_current_context('postfix-expression');
+				// initializer-list 解析へ
+				this.switch_new_context('initializer-list', 'initializer-list', 'expr_impl_term_lp_rp_lb_inilist')
+				break;
+
+			case 'cast':
+				this.set_prev_node_context(3, 'cast-expression');
+				this.set_prev_node_context(2, 'type-name');
+				this.set_prev_node_context(1, 'cast-expression');
+				// 次の解析へ遷移
+				this.state = 'expr_impl_term';
+				break;
+
+			case 'err':
+			default:
+				// その他はロジックエラー
+				this.set_current_context_error('@logic_error');
+				this.push_error_node('expression', '@logic_error');
+				finish = true;
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * ( expression ) { initializer-list まで検出済み
+	 */
+	private parse_expr_impl_term_lp_rp_lb_inilist(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		switch (this.get_token_id()) {
+			case 'right_brace':			// }
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('postfix-expression');
+				// 解析終了
+				finish = true;
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('postfix-expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// その他tokenは構文エラー
+				this.set_current_context_error('not_found_right_brace');
+				this.push_error_node('postfix-expression', 'not_found_right_brace');
+				// 解析終了
+				finish = true;
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * sizeof ( * ) まで検出した後から解析実施
+	 */
+	private parse_expr_impl_term_sizeof_lp_rp(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ) を登録
+		this.set_current_context('@undecided');
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// 未確定だったidentifierの解析結果に応じて処理を実施
+		type jdg = 'expr' | 'typename' | 'err';
+		let ctx_jdg: jdg = 'err';
+		let { valid, ctx } = this.get_prev_ctx(2);
+		if (valid) {
+			switch (ctx) {
+				case '@undecided':
+					// ( identifier * ) の解析が未確定で終了した場合、unary-expressionとみなす
+					ctx_jdg = 'expr';
+					break;
+
+				case 'expression':
+					// unary-expressionだった
+					ctx_jdg = 'expr';
+					break;
+
+				case 'type-name':
+					ctx_jdg = 'typename';
+					break;
+
+				default:
+					// その他はロジックエラー
+					ctx_jdg = 'err';
+					break;
+			}
+		} else {
+			// contextを取得できないのは構文エラー
+		}
+
+		switch (ctx_jdg) {
+			case 'expr':
+				this.set_prev_node_context(3, 'unary-expression');
+				this.set_prev_node_context(2, 'unary-expression');
+				this.set_prev_node_context(1, 'unary-expression');
+				finish = true;
+				break;
+
+			case 'typename':
+				this.set_prev_node_context(3, 'sizeof');
+				this.set_prev_node_context(2, 'type-name');
+				this.set_prev_node_context(1, 'sizeof');
+				finish = true;
+				break;
+
+			case 'err':
+			default:
+				// その他はロジックエラー
+				this.set_current_context_error('@logic_error');
+				this.push_error_node('expression', '@logic_error');
+				finish = true;
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * argument-expression-list解析
+	 */
+	private parse_arg_expr_list(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		if (this.is_expression_token()) {
+			// expression開始tokenが出現していたら
+			// assignment-expression解析開始
+			this.switch_new_context('assignment-expression', 'assign-expr', 'arg_expr_list_re');
+		} else {
+			if (this.get_token_id() == 'EOF') {
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('postfix-expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+			} else {
+				// その他tokenが出現したら構文エラー、解析終了とする
+				this.set_current_context_error('unexpected-token');
+				finish = true;
+			}
+		}
+
+		return finish;
+	}
+	/**
+	 * argument-expression-list解析
+	 */
+	private parse_arg_expr_list_re(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		switch (this.get_token_id()) {
+			case 'comma':
+				// , が出現したら解析継続
+				this.push_parse_node('argument-expression-list');
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.is_expression_token()) {
+					// expression開始tokenが出現していたら
+					// assignment-expression解析開始
+					this.switch_new_context('assignment-expression', 'assign-expr', 'arg_expr_list_re');
+				} else {
+					if (this.get_token_id() == 'EOF') {
+						// EOF が出現したら構文エラーで終了
+						this.set_current_context_error('EOF_in_parse');
+						this.push_error_node('postfix-expression', 'EOF_in_parse');
+						this.state = 'EOF';
+						finish = true;
+					} else {
+						// その他tokenが出現したら構文エラー、解析終了とする
+						this.set_current_context_error('unexpected-token');
+						finish = true;
+					}
+				}
+				break;
+
+			default:
+				// その他tokenが出現したら解析終了とする
+				finish = true;
 				break;
 		}
 
@@ -1070,7 +1710,7 @@ export default class parser {
 	}
 
 	/**
-	 * declaration解析(初回)
+	 * declaration解析
 	 * declaration-specifiers init-declarator-list(opt) ;
 	 */
 	private parse_declaration(): boolean {
@@ -1083,80 +1723,7 @@ export default class parser {
 		// type-specifierの出現有無を初期化
 		this.is_type_appear = true;
 
-		switch (this.get_curr_token_id()) {
-			// storage-class-specifier
-			case 'typedef':
-			case 'extern':
-			case 'static':
-			case 'auto':
-			case 'register':
-			// 先頭以外で出現するのはNGか？
-			// type-qualifier
-			case 'const':
-			case 'restrict':
-			case 'volatile':
-			// function specifier
-			case 'inline':
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('declaration-specifier');
-				// 次状態へ遷移
-				this.state = 'decl_decl-spec';
-				break;
-
-			// type-specifier
-			case 'void':
-			case 'char':
-			case 'short':
-			case 'int':
-			case 'long':
-			case 'float':
-			case 'double':
-			case 'signed':
-			case 'unsigned':
-			case '_Bool':
-			case '_Complex':
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('declaration-specifier');
-				// type-specifierが出現
-				this.is_type_appear = true;
-				// 次状態へ遷移
-				this.state = 'decl_decl-spec';
-				break;
-			case 'struct':
-			case 'union':
-				// struct or union であれば、struct-or-union-specifierの解析開始
-				this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'decl_decl-spec');
-				// type-specifierが出現
-				this.is_type_appear = true;
-				// 次状態へ遷移
-				this.state = 'decl_decl-spec';
-				break;
-			case 'enum':
-				// enumであれば、enum-specifierの解析開始
-				this.switch_new_context('enum-specifier', 'enum-spec', 'decl_decl-spec');
-				// type-specifierが出現
-				this.is_type_appear = true;
-				// 次状態へ遷移
-				this.state = 'decl_decl-spec';
-				break;
-
-			case 'identifier':
-				// typedefとして定義された型か判定
-				if (this.is_typedef_token()) {
-					// 定義済みであればエラーなし
-					// 解析ツリーに出現トークンを登録
-					this.push_parse_node('declaration-specifier');
-				} else {
-					// 未定義でも型とみなして解析継続
-					// 解析ツリーに出現トークンを登録
-					this.push_parse_node('declaration-specifier', 'unknown_type');
-				}
-				// type-specifierが出現
-				this.is_type_appear = true;
-				// 次状態へ遷移
-				this.state = 'decl_decl-spec';
-				break;
-
+		switch (this.get_token_id()) {
 			case 'semicolon':
 				// ;によりdeclarationのcontext終了となる
 				// 解析ツリーに出現トークンを登録
@@ -1169,140 +1736,42 @@ export default class parser {
 				// 解析ツリーに出現トークンを登録
 				this.push_parse_node('declaration-specifier');
 				// 解析終了
+				this.state = 'EOF';
 				finish = true;
 				break;
 
 			default:
-				// その他tokenは構文エラー
-				// declaration出現のcontextであることを前提に遷移するので、
-				// 何かしらの期待するtokenだったとみなして解析継続
-				this.push_error_node('declaration', 'unexpected-token');
-				// contextにエラーを設定
-				this.set_current_context_error('unexpected-token');
-				// 次状態へ遷移
-				this.state = 'decl_decl-spec';
+				if (this.is_declaration_token()) {
+					// declaration-specifierの解析開始
+					this.switch_new_context('declaration-specifier', 'decl-specifiers', 'declaration_decl-spec');
+				} else {
+					// その他tokenは構文エラー
+					// declarationが出現するcontextで呼ばれるのでこのパスはありえない
+					// 無限ループしないためにtokenを消費して解析終了
+					// 解析ツリーに出現tokenを登録
+					this.push_parse_node('declaration-specifier', 'unexpected-token');
+					// contextにエラーを設定
+					this.set_current_context_error('unexpected-token');
+					// 解析終了
+					finish = true;
+				}
 				break;
 		}
 
 		return finish;
 	}
 	/**
-	 * declaration解析(2回目以降)
-	 * declaration-specifiers init-declarator-list(opt) ;
+	 * declaration解析
+	 * declaration-specifiers まで検出した後から解析実施
 	 */
-	private parse_decl_decl_spec(): boolean {
+	private parse_declaration_decl_spec(): boolean {
 		let finish: boolean;
 		finish = false;
 
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
-			// storage-class-specifier
-			case 'typedef':
-			case 'extern':
-			case 'static':
-			case 'auto':
-			case 'register':
-			// 先頭以外で出現するのはNGか？
-			// type-qualifier
-			case 'const':
-			case 'restrict':
-			case 'volatile':
-			// function specifier
-			case 'inline':
-				// declaration-specifiers であればそのまま解析継続
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('declaration-specifier');
-				break;
-
-			// type-specifier
-			case 'void':
-			case 'char':
-			case 'short':
-			case 'int':
-			case 'long':
-			case 'float':
-			case 'double':
-			case 'signed':
-			case 'unsigned':
-			case '_Bool':
-			case '_Complex':
-				// declaration-specifiers の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
-					// 型出現済みであれば、2回以上出現したので構文エラー
-					// 解析ツリーに出現トークンを登録
-					this.push_parse_node('declaration-specifier', 'duplicate_type_specify');
-				} else {
-					// 未出現であれば問題なし
-					// 解析ツリーに出現トークンを登録
-					this.push_parse_node('declaration-specifier');
-				}
-				// type-specifierが出現
-				this.is_type_appear = true;
-				break;
-			case 'struct':
-			case 'union':
-				// declaration-specifiers の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
-					// 型出現済みであれば、2回以上出現したので構文エラー
-					// struct or union であれば、struct-or-union-specifierの解析開始
-					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'decl_decl-spec', 'duplicate_type_specify');
-				} else {
-					// struct or union であれば、struct-or-union-specifierの解析開始
-					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'decl_decl-spec');
-				}
-				// type-specifierが出現
-				this.is_type_appear = true;
-				break;
-			case 'enum':
-				// declaration-specifiers の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
-					// struct or union であれば、enum-specifierの解析開始
-					this.switch_new_context('enum-specifier', 'enum-spec', 'decl_decl-spec', 'duplicate_type_specify');
-				} else {
-					// struct or union であれば、enum-specifierの解析開始
-					this.switch_new_context('enum-specifier', 'enum-spec', 'decl_decl-spec');
-				}
-				// type-specifierが出現
-				this.is_type_appear = true;
-				break;
-
-			case 'identifier':
-				// typedefとして定義された型か判定
-				if (this.is_typedef_token()) {
-					// declaration-specifiers の一連の解析内で型が出現済みか判定
-					if (this.is_type_appear) {
-						// 型定義済み かつ 型出現済みであれば、2回以上出現したので構文エラー
-						// 解析ツリーに出現トークンを登録
-						this.push_parse_node('declaration-specifier', 'duplicate_type_specify');
-					} else {
-						// 型定義済み かつ 未出現であれば問題なし
-						// 解析ツリーに出現トークンを登録
-						this.push_parse_node('declaration-specifier');
-					}
-				} else {
-					// 未定義でも型とみなして解析継続
-					// 解析ツリーに出現トークンを登録
-					this.push_parse_node('declaration-specifier', 'unknown_type');
-					// declaration-specifiers の一連の解析内で型が出現済みか判定
-					if (this.is_type_appear) {
-						// 型未定義 かつ 型出現済みであれば、declaratorとみなして次の解析へ遷移
-						this.switch_new_context('declarator', 'declarator', 'decl_decl-spec_decl');
-					} else {
-						// 型未定義 かつ 未出現であれば型とみなして解析継続
-						this.push_parse_node('declaration-specifier', 'unknown_type');
-					}
-				}
-				// type-specifierが出現
-				this.is_type_appear = true;
-				break;
-
-			case 'left_paren':
-				// ( が出現したらdeclaratorの開始とみなして次の解析へ遷移
-				this.switch_new_context('declarator', 'declarator', 'decl_decl-spec_decl');
-				break;
-
+		switch (this.get_token_id()) {
 			case 'semicolon':
 				// ;によりdeclarationのcontext、declarationの終了となる
 				// 解析ツリーに出現トークンを登録
@@ -1311,19 +1780,26 @@ export default class parser {
 				break;
 
 			case 'EOF':
-				// EOFは構文エラーとする
-				this.push_error_node('declaration-specifier', 'EOF_in_parse');
-				// contextにエラーを設定
+				// EOF が出現したら構文エラーで終了
 				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('declaration', 'EOF_in_parse');
+				this.state = 'EOF';
 				finish = true;
 				break;
 
 			default:
-				// その他tokenは構文エラー
-				// declaratorが出現しなかったものとして解析継続
-				this.push_error_node('declarator', 'not_found_declarator');
-				// contextにエラーを設定
-				this.set_current_context_error('not_found_declarator');
+				// その他tokenが出現
+				if (this.is_declarator_token()) {
+					// declarator開始tokenであれば解析開始
+					this.switch_new_context('declarator', 'declarator', 'declaration_decl-spec_decl');
+				} else {
+					// その他は構文エラーで終了
+					// declaratorが出現しなかったものとして解析継続
+					this.push_error_node('declarator', 'not_found_declarator');
+					// contextにエラーを設定
+					this.set_current_context_error('not_found_declarator');
+					finish = true;
+				}
 				break;
 		}
 
@@ -1333,29 +1809,37 @@ export default class parser {
 	 * declaration解析
 	 * declaratorまで取得した後、init-declarator-list(opt)の解析を実施
 	 */
-	private parse_decl_decl_spec_decl(): boolean {
+	private parse_declaration_decl_spec_decl(): boolean {
 		let finish: boolean;
 		finish = false;
 
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'simple_assign_op':
 				// = が出現したら初期化を実施
 				// 解析ツリーに出現トークンを登録
 				this.push_parse_node('init-declarator');
 				// initializerの解析を実施
-				this.switch_new_context('initializer', 'initializer', 'decl_decl-spec_decl');
+				this.switch_new_context('initializer', 'initializer', 'declaration_decl-spec_decl');
 				break;
 			case 'comma':
 				// , が出現したら次のdeclaratorを解析
-				this.switch_new_context('declarator', 'declarator', 'decl_decl-spec_decl');
+				this.switch_new_context('declarator', 'declarator', 'declaration_decl-spec_decl');
 				break;
 			case 'semicolon':
 				// ; が出現したらdeclarator解析完了
 				// 解析ツリーに出現トークンを登録
 				this.push_parse_node('declaration');
+				finish = true;
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('declarator', 'EOF_in_parse');
+				this.state = 'EOF';
 				finish = true;
 				break;
 
@@ -1366,6 +1850,12 @@ export default class parser {
 				// contextにエラーを設定
 				this.set_current_context_error('unexpected-token');
 				break;
+		}
+
+		// 解析完了であれば取得したgrammarを評価
+		if (finish) {
+			// typedef
+			this.eval_declaration( this.get_curr_node() );
 		}
 
 		return finish;
@@ -1382,11 +1872,13 @@ export default class parser {
 		this.skip_whitespace();
 
 		// type-specifierの出現有無を初期化
-		this.is_type_appear = true;
+		this.is_type_appear = false;
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			// storage-class-specifier
 			case 'typedef':
+				// typedef context であることを記憶
+				this.set_current_context_is_typedef();
 			case 'extern':
 			case 'static':
 			case 'auto':
@@ -1461,12 +1953,10 @@ export default class parser {
 				break;
 
 			case 'EOF':
-				// EOFは構文エラー
-				// 解析ツリーに出現トークンを登録
-				this.push_error_node('declaration-specifier', 'EOF_in_parse');
-				// contextにエラーを設定
+				// EOF が出現したら構文エラーで終了
 				this.set_current_context_error('EOF_in_parse');
-				// 解析終了
+				this.push_error_node('declaration-specifier', 'EOF_in_parse');
+				this.state = 'EOF';
 				finish = true;
 				break;
 
@@ -1495,9 +1985,11 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			// storage-class-specifier
 			case 'typedef':
+				// typedef context であることを記憶
+				this.set_current_context_is_typedef();
 			case 'extern':
 			case 'static':
 			case 'auto':
@@ -1526,6 +2018,8 @@ export default class parser {
 			case 'unsigned':
 			case '_Bool':
 			case '_Complex':
+			case '__far':
+			case '__near':
 				// declaration-specifiers の一連の解析内で型が出現済みか判定
 				if (this.is_type_appear) {
 					// 型出現済みであれば、2回以上出現したので構文エラー
@@ -1580,9 +2074,6 @@ export default class parser {
 						this.push_parse_node('declaration-specifier');
 					}
 				} else {
-					// 未定義でも型とみなして解析継続
-					// 解析ツリーに出現トークンを登録
-					this.push_parse_node('declaration-specifier', 'unknown_type');
 					// declaration-specifiers の一連の解析内で型が出現済みか判定
 					if (this.is_type_appear) {
 						// 型未定義 かつ 型出現済みであれば、declaratorとみなして解析終了
@@ -1594,6 +2085,12 @@ export default class parser {
 				}
 				// type-specifierが出現
 				this.is_type_appear = true;
+				break;
+
+			case 'EOF':
+				// EOF が出現したら終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
@@ -1616,14 +2113,20 @@ export default class parser {
 		// 最初にstruct/unionを登録する。
 		this.push_parse_node('struct-or-union');
 
+		// 空白をスキップ
+		this.skip_whitespace();
+
 		// check: identifier
-		if (this.get_curr_token_id() == 'identifier') {
+		if (this.get_token_id() == 'identifier') {
 			// identifierであればtoken受理
 			this.push_parse_node('struct-or-union');
 		}
 
+		// 空白をスキップ
+		this.skip_whitespace();
+
 		// check: {
-		if (this.get_curr_token_id() == 'left_brace') {
+		if (this.get_token_id() == 'left_brace') {
 			// struct-declaration-list 解析開始
 			this.push_parse_node('struct-or-union');
 			this.state = 'struct-declaration-list';
@@ -1642,10 +2145,21 @@ export default class parser {
 		this.skip_whitespace();
 
 		// } が登場するまで繰り返す
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			// } によりstruct/union定義終了
 			case 'right_brace':
 				this.push_parse_node('struct-or-union');
+				finish = true;
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('struct-or-union', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
 				finish = true;
 				break;
 
@@ -1669,13 +2183,24 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'colon':
 				// : が出現したら constant-expression が続く
 				this.push_parse_node('struct-declarator');
 				// constant-expression解析を開始
 				// 解析終了したらstruct-declarator-list(2回目以降)の解析へ遷移
-				this.switch_new_context('constant-expression', 'constant-expression', 'struct-declarator-list_re');
+				this.switch_new_context('constant-expression', 'const-expr', 'struct-declarator-list_re');
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('struct-declarator', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
@@ -1697,13 +2222,13 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'colon':
 				// : が出現したら constant-expression が続く
 				this.push_parse_node('struct-declarator');
 				// constant-expression解析を開始
 				// 解析終了したらstruct-declarator-list(2回目以降)の解析へ遷移
-				this.switch_new_context('constant-expression', 'constant-expression', 'struct-declarator-list_re');
+				this.switch_new_context('constant-expression', 'const-expr', 'struct-declarator-list_re');
 				break;
 
 			case 'comma':
@@ -1717,6 +2242,17 @@ export default class parser {
 				// struct-declaration-list の解析に戻る
 				this.push_parse_node('struct-declarator');
 				this.state = 'struct-declaration-list';
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('struct-declarator', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
@@ -1744,13 +2280,19 @@ export default class parser {
 		// enum 出現を前提にtoken登録
 		this.push_parse_node('enum-specifier');
 
+		// 空白をスキップ
+		this.skip_whitespace();
+
 		// identifierチェック
-		if (this.get_curr_token_id() == 'identifier') {
+		if (this.get_token_id() == 'identifier') {
 			this.push_parse_node('enum-specifier');
 		}
 
+		// 空白をスキップ
+		this.skip_whitespace();
+
 		// { チェック
-		if (this.get_curr_token_id() == 'left_brace') {
+		if (this.get_token_id() == 'left_brace') {
 			// { が出現していたらenumerator-listの解析を実施
 			this.push_parse_node('enum-specifier');
 			this.switch_new_context('enum-specifier', 'enum-list', 'enum-spec_lb');
@@ -1774,7 +2316,7 @@ export default class parser {
 		this.skip_whitespace();
 
 		// { チェック
-		if (this.get_curr_token_id() == 'right_brace') {
+		if (this.get_token_id() == 'right_brace') {
 			// } が出現していたらenumerator-specifierの解析終了
 			this.push_parse_node('enum-specifier');
 		} else {
@@ -1796,20 +2338,23 @@ export default class parser {
 		this.skip_whitespace();
 
 		// identifierチェック
-		if (this.get_curr_token_id() == 'identifier') {
+		if (this.get_token_id() == 'identifier') {
 			// enum定義登録
 			this.push_enum_const();
 			// token登録
 			this.push_parse_node('enum-specifier');
 		}
 
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
 		// = チェック
-		if (this.get_curr_token_id() == 'simple_assign_op') {
+		if (this.get_token_id() == 'simple_assign_op') {
 			// = が出現していたらconstant-expression取得
 			this.push_parse_node('enum-specifier');
 			// constant-expression解析を開始
 			// 解析終了したらenumerator-list(2回目以降)の解析へ遷移
-			this.switch_new_context('constant-expression', 'constant-expression', 'enum-list_re');
+			this.switch_new_context('constant-expression', 'const-expr', 'enum-list_re');
 		} else {
 			// = が出現していなければenumeratorの解析終了
 			// enumerator-listの2回目以降(,以降)の解析へ遷移
@@ -1830,11 +2375,13 @@ export default class parser {
 		this.skip_whitespace();
 
 		// ,チェック
-		if (this.get_curr_token_id() == 'comma') {
+		if (this.get_token_id() == 'comma') {
 			// token登録
 			this.push_parse_node('enum-specifier');
+			// 空白をスキップ
+			this.skip_whitespace();
 			// } が続く可能性があるのでチェック
-			if (this.get_curr_token_id() == 'right_brace') {
+			if (this.get_token_id() == 'right_brace') {
 				// } が出現したら解析終了
 				finish = true;
 			} else {
@@ -1860,7 +2407,7 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'asterisk':
 				// * が出現したらpointer解析
 				this.switch_new_context('pointer', 'pointer', 'declarator');
@@ -1882,7 +2429,11 @@ export default class parser {
 
 			case 'EOF':
 				// EOF出現、構文エラーで終了
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('declarator', 'EOF_in_parse');
+				// contextにエラーを設定
 				this.set_current_context_error('EOF_in_parse');
+				this.state = 'EOF';
 				finish = true;
 				break;
 
@@ -1921,7 +2472,7 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'left_bracket':
 				// [ が出現したら変数宣言と確定
 				this.set_current_context('declarator_var');
@@ -1941,6 +2492,7 @@ export default class parser {
 				break;
 
 			case 'EOF':
+				this.state = 'EOF';
 			default:
 				// その他tokenが出現したらdeclarator解析完了とする
 				finish = true;
@@ -1960,7 +2512,7 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'right_bracket':
 				// ] が出現したら解析完了とする
 				this.push_parse_node('direct-declarator');
@@ -1980,7 +2532,7 @@ export default class parser {
 				// 空白を事前にスキップ
 				this.skip_whitespace();
 				// 次は必ず ] が出現する
-				if (this.get_curr_token_id() == 'right_bracket') {
+				if (this.get_token_id() == 'right_bracket') {
 					// ] が出現したら解析完了とする
 					this.push_parse_node('direct-declarator');
 				} else {
@@ -1993,7 +2545,11 @@ export default class parser {
 
 			case 'EOF':
 				// EOF出現、構文エラーで終了
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('direct-declarator', 'EOF_in_parse');
+				// contextにエラーを設定
 				this.set_current_context_error('EOF_in_parse');
+				this.state = 'EOF';
 				finish = true;
 				break;
 
@@ -2027,7 +2583,7 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'right_bracket':
 				// ] が出現したら解析完了とする
 				this.push_parse_node('direct-declarator');
@@ -2036,7 +2592,11 @@ export default class parser {
 
 			case 'EOF':
 				// EOF出現、構文エラーで終了
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('direct-declarator', 'EOF_in_parse');
+				// contextにエラーを設定
 				this.set_current_context_error('EOF_in_parse');
+				this.state = 'EOF';
 				finish = true;
 				break;
 
@@ -2060,7 +2620,7 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'right_paren':
 				// ) が出現したら解析完了とする
 				this.push_parse_node('direct-declarator');
@@ -2074,14 +2634,24 @@ export default class parser {
 
 			case 'EOF':
 				// EOF出現、構文エラーで終了
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('direct-declarator', 'EOF_in_parse');
+				// contextにエラーを設定
 				this.set_current_context_error('EOF_in_parse');
+				this.state = 'EOF';
 				finish = true;
 				break;
 
 			default:
-				// その他tokenが出現したら構文エラー、解析終了とする
-				this.set_current_context_error('not_found_right_paren');
-				finish = true;
+				if (this.is_declaration_token()) {
+					// declaration開始token(declaration-specifiers token)が出現したら
+					// parameter-type-list解析開始
+					this.switch_new_context('parameter-type-list', 'parameter-type-list', 'direct-declarator_lp_list_rp');
+				} else {
+					// その他tokenが出現したら構文エラー、解析終了とする
+					this.set_current_context_error('not_found_right_paren');
+					finish = true;
+				}
 				break;
 		}
 
@@ -2090,10 +2660,8 @@ export default class parser {
 	/**
 	 * direct-declarator解析
 	 * direct-declarator ( identifier まで検出した後から解析開始
-	 * parameter-type-list か identifier-list か判別不能のため、
-	 * 判別可能な状況まで解析を進める。
-	 * 判別可能となった時点でそれぞれの状態へ合流するので、
-	 * 本状態は新しいcontextとして解析すること(switch_new_context)
+	 * 型定義を完全に解析しないと parameter-type-list か identifier-list か判別不能のため、
+	 * parameter-type-listの前提で解析を実施
 	 */
 	private parse_direct_declarator_lp_list(): boolean {
 		let finish: boolean;
@@ -2102,7 +2670,7 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'right_paren':
 				// ) が出現したら解析完了とする
 				// 判別不可のまま終了したら identifier-list とする
@@ -2112,20 +2680,20 @@ export default class parser {
 
 			case 'EOF':
 				// EOF出現、構文エラーで終了
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('parameter-type-list', 'EOF_in_parse');
+				// contextにエラーを設定
 				this.set_current_context_error('EOF_in_parse');
+				this.state = 'EOF';
 				finish = true;
-				break;
-
-			case 'identifier':
 				break;
 
 			default:
 				if (this.is_declaration_token()) {
 					// declaration開始tokenであればdeclaration-specifiers出現
 					// parameter-type-list として解析を開始
-					// identifierは別枠で判定
 					this.set_current_context('parameter-type-list');
-					this.state = 'parameter-type-list';
+					this.switch_new_context('parameter-type-list', 'parameter-type-list', 'direct-declarator_lp_list_rp');
 				} else {
 					// その他tokenが出現したら構文エラー、解析終了とする
 					this.set_current_context_error('not_found_right_paren');
@@ -2141,8 +2709,38 @@ export default class parser {
 	 * direct-declarator ( list まで検出した後から解析開始
 	 */
 	private parse_direct_declarator_lp_list_rp(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
 		// ) を登録して解析完了とする
-		this.push_parse_node('direct-declarator');
+		switch (this.get_token_id()) {
+			case 'right_paren':
+				// ) が出現したら解析完了とする
+				this.push_parse_node('direct-declarator');
+				finish = true;
+				break;
+
+			case 'EOF':
+				// EOF出現、構文エラーで終了
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('direct-declarator', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// その他tokenが出現したら構文エラー、解析終了とする
+				this.set_current_context_error('not_found_right_paren');
+				finish = true;
+				break;
+		}
+
+		return finish;
 	}
 
 	/**
@@ -2174,15 +2772,14 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		// declarator, abstract-declarator 判定
-		// 
-
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'comma':
 				// , が出現したら次のparameter-list解析
 				this.push_parse_node('parameter-type-list');
+				// 空白をスキップ
+				this.skip_whitespace();
 				// ... が続いたら可変長引数、ここでparameter-type-list終了
-				if (this.get_curr_token_id() == 'ellipsis') {
+				if (this.get_token_id() == 'ellipsis') {
 					this.push_parse_node('parameter-type-list');
 					finish = true;
 				} else {
@@ -2193,11 +2790,13 @@ export default class parser {
 
 			case 'left_paren':
 				this.push_parse_node('parameter-type-list');
+				// 空白をスキップ
+				this.skip_whitespace();
 				// ( が出現したときは declarator か abstract-declarator が連続する
 				// 次に出現するgrammarは identifier, abstract-declarator, parameter-type-list になる。
 				// 次に出現するtokenは競合しないため、この時点で判定できる。
 				// ※暫定で解析後の遷移先は共通に。個別に対応必要であれば都度実装
-				if (this.get_curr_token_id() == 'identifier') {
+				if (this.get_token_id() == 'identifier') {
 					// identifier が出現したら declarator 解析
 					this.switch_new_context('parameter-type-list', 'declarator', 'parameter-type-list_type_lp_decl');
 				} else if (this.is_abst_decl_begin_token()) {
@@ -2208,11 +2807,25 @@ export default class parser {
 					this.switch_new_context('parameter-type-list', 'parameter-type-list', 'parameter-type-list_type_lp_decl');
 				}
 				break;
+
+			case 'EOF':
+				// EOF出現、構文エラーで終了
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('parameter-type-list', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// その他tokenが出現したら解析終了とする
+				finish = true;
+				break;
 		}
 
 		return finish;
 	}
-
 	/**
 	 * ( ? まで解析した後に遷移する。
 	 * ) のチェックを実施する。
@@ -2224,21 +2837,35 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'right_paren':
 				// abstract-declarator 解析完了
 				this.push_parse_node('parameter-type-list');
+				// paramater-declaration の解析まで完了
+				// parameter-list が継続するかの判定へ遷移する
+				this.state = 'parameter-type-list_type_lp_rp';
+				break;
+
+			case 'EOF':
+				// EOF出現、構文エラーで終了
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('parameter-type-list', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
 				// ) 以外が出現したら構文エラー
 				this.push_error_node('parameter-type-list', 'not_found_right_paren');
+				// contextにエラーを設定
+				this.set_current_context_error('not_found_right_paren');
+				// paramater-declaration の解析まで完了
+				// parameter-list が継続するかの判定へ遷移する
+				this.state = 'parameter-type-list_type_lp_rp';
 				break;
 		}
-
-		// paramater-declaration の解析まで完了
-		// parameter-list が継続するかの判定へ遷移する
-		this.state = 'parameter-type-list_type_lp_rp';
 
 		return finish;
 	}
@@ -2254,11 +2881,14 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'comma':
 				this.push_parse_node('parameter-type-list');
+				// 空白をスキップ
+				this.skip_whitespace();
+
 				// , が出現したら、parameter-declaration か ... が続く
-				if (this.get_curr_token_id() == 'ellipsis') {
+				if (this.get_token_id() == 'ellipsis') {
 					// ... が続いたら解析終了
 					this.push_parse_node('parameter-type-list');
 					finish = true;
@@ -2268,6 +2898,11 @@ export default class parser {
 				}
 				break;
 
+			case 'EOF':
+				// EOF で終了
+				this.state = 'EOF';
+				finish = true;
+				break;
 			default:
 				// , 以外が出現したら解析終了
 				finish = true;
@@ -2341,7 +2976,7 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			// type-qualifier
 			case 'const':
 			case 'restrict':
@@ -2392,6 +3027,17 @@ export default class parser {
 				}
 				break;
 
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('type-qualifier', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
+				break;
+
 			// 上記で定義したtokenが出現している間はspecifier-quailifier-listとみなす。
 			// 上記以外のtokenが出現したら解析終了
 			default:
@@ -2412,7 +3058,7 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'asterisk':
 				// pointer 解析を開始
 				this.switch_new_context('abstract-declarator', 'pointer', 'abstract-declarator');
@@ -2420,6 +3066,8 @@ export default class parser {
 
 			case 'left_paren':
 				this.push_parse_node('abstract-declarator');
+				// 空白をスキップ
+				this.skip_whitespace();
 				// ( が出現したら abstract-declarator か parameter-type-list が開始する。
 				// 次に出現する文字は競合しないため、この時点で判定できる。
 				if (this.is_abst_decl_begin_token()) {
@@ -2435,6 +3083,17 @@ export default class parser {
 				// [ の中の解析へ遷移
 				this.push_parse_node('abstract-declarator');
 				this.state = 'abstract-declarator_lb';
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('abstract-declarator', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
@@ -2458,10 +3117,21 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'right_paren':
 				// abstract-declarator 解析完了
 				this.push_parse_node('abstract-declarator');
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('abstract-declarator', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
@@ -2484,10 +3154,21 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'right_paren':
 				// abstract-declarator 解析完了
 				this.push_parse_node('abstract-declarator');
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('abstract-declarator', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
@@ -2512,7 +3193,7 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'right_bracket':
 				// abstract-declarator [] で終了
 				this.push_parse_node('abstract-declarator');
@@ -2523,14 +3204,27 @@ export default class parser {
 			case 'asterisk':
 				// abstract-declarator [*] で終了
 				this.push_parse_node('abstract-declarator');
+				// 空白をスキップ
+				this.skip_whitespace();
 				// ] が続けば解析終了、出現しなければ構文エラー
-				if (this.get_curr_token_id() == 'right_bracket') {
+				if (this.get_token_id() == 'right_bracket') {
 					this.push_parse_node('abstract-declarator');
 				} else {
 					this.push_error_node('abstract-declarator', 'not_found_right_bracket');
 				}
 				// direct-abstract-declarator 解析を継続
 				this.state = 'abstract-declarator';
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('abstract-declarator', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
@@ -2556,22 +3250,28 @@ export default class parser {
 		this.state = 'abstract-declarator_rb';
 
 		// static が出現していたら受理
-		if (this.get_curr_token_id() == 'static') {
+		if (this.get_token_id() == 'static') {
 			this.push_parse_node('abstract-declarator');
+			// 空白をスキップ
+			this.skip_whitespace();
 		}
 
 		// type-qualifier が出現していたら受理
 		while (this.is_type_qualifier_token()) {
 			this.push_parse_node('abstract-declarator');
+			// 空白をスキップ
+			this.skip_whitespace();
 		}
 
 		// static が出現していたら受理
-		if (this.get_curr_token_id() == 'static') {
+		if (this.get_token_id() == 'static') {
 			this.push_parse_node('abstract-declarator');
+			// 空白をスキップ
+			this.skip_whitespace();
 		}
 
 		// assignment-expression 解析
-		if (this.get_curr_token_id() != 'right_bracket') {
+		if (this.get_token_id() != 'right_bracket') {
 			// ] でなければ assingment-expression を解析
 			this.switch_new_context('assignment-expression', 'assign-expr', 'abstract-declarator_rb');
 		}
@@ -2590,10 +3290,21 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'right_bracket':
 				// abstract-declarator 解析完了
 				this.push_parse_node('abstract-declarator');
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('abstract-declarator', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
@@ -2618,7 +3329,7 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'asterisk':
 			case 'const':
 			case 'restrict':
@@ -2626,6 +3337,17 @@ export default class parser {
 				// 解析ツリーに出現トークンを登録
 				// pointer解析継続
 				this.push_parse_node('pointer');
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('pointer', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			// 上記以外のtokenが出現したら解析終了
@@ -2651,7 +3373,7 @@ export default class parser {
 		if (this.is_expression_token()) {
 			// expression tokenであればexpression解析開始
 			this.switch_new_context('assignment-expression', 'assign-expr', 'initializer_end');
-		} else if (this.get_curr_token_id() == 'left_brace') {
+		} else if (this.get_token_id() == 'left_brace') {
 			// { であれば 
 			// { を登録
 			this.push_parse_node('initializer');
@@ -2675,10 +3397,21 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'right_brace':
 				// } が出現したら initializer 解析終了
 				this.push_parse_node('initializer');
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('initializer', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
@@ -2740,18 +3473,20 @@ export default class parser {
 		this.skip_whitespace();
 
 		// designation判定
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'left_bracket':
 				// [
 				this.push_parse_node('initializer-list');
 				// constant-expression
-				this.switch_new_context('constant-expression', 'constant-expression', 'initializer-list_design_lb_const-expr');
+				this.switch_new_context('constant-expression', 'const-expr', 'initializer-list_design_lb_const-expr');
 				break;
 			case 'dot':
 				// .
 				this.push_parse_node('initializer-list');
+				// 空白をスキップ
+				this.skip_whitespace();
 				// identifier
-				if (this.get_curr_token_id() == 'identifier') {
+				if (this.get_token_id() == 'identifier') {
 					this.push_parse_node('designator');
 				} else {
 					// identifier以外は構文エラー
@@ -2766,6 +3501,17 @@ export default class parser {
 				this.push_parse_node('designation');
 				// initializerの解析開始
 				this.switch_new_context('initializer', 'initializer', 'initializer-list_init');
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('initializer', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
@@ -2791,20 +3537,33 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'right_bracket':
 				// designator 解析完了
 				this.push_parse_node('designator');
+				// direct-abstract-declarator 解析を継続
+				this.state = 'initializer-list_design';
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('designator', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
 				// ] 以外が出現したら構文エラー
 				this.push_error_node('designator', 'not_found_right_bracket');
+				// direct-abstract-declarator 解析を継続
+				this.state = 'initializer-list_design';
 				break;
 		}
 
-		// direct-abstract-declarator 解析を継続
-		this.state = 'initializer-list_design';
 
 		return finish;
 	}
@@ -2820,7 +3579,7 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'right_brace':
 				// } が出現したらinitializer-list終了
 				finish = true;
@@ -2829,13 +3588,26 @@ export default class parser {
 			case 'comma':
 				// , が出現したら次のtokenを解析
 				this.push_parse_node('initializer-list');
-				if (this.get_curr_token_id() == 'right_brace') {
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.get_token_id() == 'right_brace') {
 					// } が出現したら終了
 					finish = true;
 				} else {
 					// } 以外が出現したら initializer-list 解析継続
 					this.state = 'initializer-list';
 				}
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('designator', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
@@ -2849,6 +3621,899 @@ export default class parser {
 	}
 
 	/**
+	 * statement解析
+	 */
+	private parse_statement(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		switch (this.get_token_id()) {
+			// labeled-statement
+			// expression-statement
+			case 'identifier':
+				// token先読み、空白はスキップする
+				let t_id: token_id;
+				let pos: number;
+				[t_id,pos] = this.get_token_id_if_not_whitespace();
+				if (t_id == 'colon') {
+					// 直後に : が出現するならlabeled-statement
+					// label登録
+					this.push_parse_node('labeled-statement');
+					// 空白をスキップ
+					this.skip_whitespace();
+					// :登録
+					this.push_parse_node('labeled-statement');
+					// statement解析開始
+					this.switch_new_context('statement', 'statement', 'statement_end');
+				} else {
+					// それ以外なら expression-statement
+					this.switch_new_context('expression', 'expr', 'statement_expr');
+				}
+				break;
+
+			// labeled-statement
+			case 'case':
+				// case登録
+				this.push_parse_node('labeled-statement');
+				// statement解析開始
+				this.switch_new_context('constant-expression', 'const-expr', 'statement_case');
+				break;
+			case 'default':
+				// default登録
+				this.push_parse_node('labeled-statement');
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.get_token_id() == 'colon') {
+					// :登録
+					this.push_parse_node('labeled-statement');
+				} else {
+					// : 以外が出現したら構文エラー
+					this.push_error_node('labeled-statement', 'not_found_colon');
+					// contextにエラーを設定
+					this.set_current_context_error('not_found_colon');
+				}
+				// statement解析開始
+				this.switch_new_context('statement', 'statement', 'statement_end');
+				break;
+
+			// expression-statement
+			case 'semicolon':
+				this.push_parse_node('expression-statement');
+				finish = true;
+				break;
+
+			// selection-statement
+			case 'if':
+				// if登録
+				this.push_parse_node('selection-statement');
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.get_token_id() == 'left_paren') {
+					// ( 登録
+					this.push_parse_node('selection-statement');
+				} else {
+					// ( 以外が出現したら構文エラー
+					this.push_error_node('selection-statement', 'not_found_left_paren');
+					// contextにエラーを設定
+					this.set_current_context_error('not_found_left_paren');
+				}
+				// statement解析開始
+				this.switch_new_context('statement', 'statement', 'statement_if');
+				break;
+			case 'switch':
+				// switch登録
+				this.push_parse_node('selection-statement');
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.get_token_id() == 'left_paren') {
+					// ( 登録
+					this.push_parse_node('selection-statement');
+				} else {
+					// ( 以外が出現したら構文エラー
+					this.push_error_node('selection-statement', 'not_found_left_paren');
+					// contextにエラーを設定
+					this.set_current_context_error('not_found_left_paren');
+				}
+				// statement解析開始
+				this.switch_new_context('statement', 'statement', 'statement_switch');
+				break;
+
+			// iteration-statement
+			case 'while':
+				// while登録
+				this.push_parse_node('iteration-statement');
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.get_token_id() == 'left_paren') {
+					// ( 登録
+					this.push_parse_node('iteration-statement');
+				} else {
+					// ( 以外が出現したら構文エラー
+					this.push_error_node('iteration-statement', 'not_found_left_paren');
+					// contextにエラーを設定
+					this.set_current_context_error('not_found_left_paren');
+				}
+				// statement解析開始
+				this.switch_new_context('statement', 'statement', 'statement_while');
+				break;
+			case 'do':
+				// do登録
+				this.push_parse_node('iteration-statement');
+				// statement解析開始
+				this.switch_new_context('statement', 'statement', 'statement_do');
+				break;
+			case 'for':
+				// for登録
+				this.push_parse_node('iteration-statement');
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.get_token_id() == 'left_paren') {
+					// ( 登録
+					this.push_parse_node('iteration-statement');
+				} else {
+					// ( 以外が出現したら構文エラー
+					this.push_error_node('iteration-statement', 'not_found_left_paren');
+					// contextにエラーを設定
+					this.set_current_context_error('not_found_left_paren');
+				}
+				this.state = 'statement_for_lp';
+				break;
+
+			// jump-statement
+			case 'goto':
+				// goto登録
+				this.push_parse_node('jump-statement');
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.get_token_id() == 'identifier') {
+					// identifier 登録
+					this.push_parse_node('jump-statement');
+				} else {
+					// identifier 以外が出現したら構文エラー
+					this.push_error_node('jump-statement', 'unexpected-token');
+					// contextにエラーを設定
+					this.set_current_context_error('unexpected-token');
+				}
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.get_token_id() == 'semicolon') {
+					// ; 登録
+					this.push_parse_node('jump-statement');
+				} else {
+					// ; 以外が出現したら構文エラー
+					this.push_error_node('jump-statement', 'unexpected-token');
+					// contextにエラーを設定
+					this.set_current_context_error('unexpected-token');
+				}
+				finish = true;
+				break;
+			case 'continue':
+			case 'break':
+				// continue/break登録
+				this.push_parse_node('jump-statement');
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.get_token_id() == 'semicolon') {
+					// ; 登録
+					this.push_parse_node('jump-statement');
+				} else {
+					// ; 以外が出現したら構文エラー
+					this.push_error_node('jump-statement', 'unexpected-token');
+					// contextにエラーを設定
+					this.set_current_context_error('unexpected-token');
+				}
+				finish = true;
+				break;
+			case 'return':
+				// goto登録
+				this.push_parse_node('jump-statement');
+				// 空白をスキップ
+				this.skip_whitespace();
+				if (this.get_token_id() == 'semicolon') {
+					// 次の状態へ遷移
+					this.state = 'statement_return';
+				} else {
+					// ; 以外が出現したらexpression解析開始
+					this.switch_new_context('expression', 'expr', 'statement_return');
+				}
+				break;
+
+			// compound statement
+			case 'left_brace':
+				this.state = 'statement_compound';
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('declaration', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// その他token
+				if (this.is_declaration_token()) {
+					// declaration開始tokenであれば解析開始
+					this.switch_new_context('declaration', 'declaration', 'func-def_decl-spec_decl');
+				} else {
+					// その他は構文エラー
+					// エラー処理に任せる
+					this.state = 'func-def_decl-spec_decl@err';
+				}
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * case const-expr まで検出
+	 */
+	private parse_statement_case(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		if (this.get_token_id() == 'colon') {
+			// : が出現したら
+			this.push_parse_node('labeled-statement');
+		} else {
+			// : 以外が出現したら構文エラー
+			this.push_error_node('labeled-statement', 'not_found_colon');
+			// contextにエラーを設定
+			this.set_current_context_error('not_found_colon');
+		}
+
+		// statement解析へ以降する
+		this.switch_new_context('statement', 'statement', 'statement_end');
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * if ( expr まで検出
+	 */
+	private parse_statement_if(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ) チェック
+		if (this.get_token_id() == 'right_paren') {
+			// ) が出現したら
+			this.push_parse_node('selection-statement');
+		} else {
+			// ) 以外が出現したら構文エラー
+			this.push_error_node('selection-statement', 'not_found_right_paren');
+			// contextにエラーを設定
+			this.set_current_context_error('not_found_right_paren');
+		}
+
+		// statement解析へ以降する
+		this.switch_new_context('statement', 'statement', 'statement_if_state');
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * if ( expr ) statement まで検出
+	 */
+	private parse_statement_if_state(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// else チェック
+		if (this.get_token_id() == 'else') {
+			// else が出現したら
+			this.push_parse_node('selection-statement');
+			// statement解析へ以降する
+			this.switch_new_context('statement', 'statement', 'statement_if_state');
+		} else {
+			// else 以外が出現したら解析終了
+			finish = true;
+		}
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * switch ( expr まで検出
+	 */
+	private parse_statement_switch(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ) チェック
+		if (this.get_token_id() == 'right_paren') {
+			// ) が出現したら
+			this.push_parse_node('selection-statement');
+		} else {
+			// ) 以外が出現したら構文エラー
+			this.push_error_node('selection-statement', 'not_found_right_paren');
+			// contextにエラーを設定
+			this.set_current_context_error('not_found_right_paren');
+		}
+
+		// statement解析へ以降する
+		this.switch_new_context('statement', 'statement', 'statement_switch_state');
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * switch ( expr ) statement まで検出
+	 */
+	private parse_statement_switch_state(): boolean {
+		return true;
+	}
+	/**
+	 * statement解析
+	 * while ( expr まで検出
+	 */
+	private parse_statement_while(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ) チェック
+		if (this.get_token_id() == 'right_paren') {
+			// ) が出現したら
+			this.push_parse_node('iteration-statement');
+		} else {
+			// ) 以外が出現したら構文エラー
+			this.push_error_node('iteration-statement', 'not_found_right_paren');
+			// contextにエラーを設定
+			this.set_current_context_error('not_found_right_paren');
+		}
+
+		// statement解析へ以降する
+		this.switch_new_context('statement', 'statement', 'statement_while_state');
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * while ( expr ) statement まで検出
+	 */
+	private parse_statement_while_state(): boolean {
+		return true;
+	}
+	/**
+	 * statement解析
+	 * do statement まで検出
+	 */
+	private parse_statement_do(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// while チェック
+		if (this.get_token_id() == 'while') {
+			// while が出現したら
+			this.push_parse_node('iteration-statement');
+		} else {
+			// while 以外が出現したら構文エラー
+			this.push_error_node('iteration-statement', 'not_found_while');
+			// contextにエラーを設定
+			this.set_current_context_error('not_found_while');
+		}
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ( チェック
+		if (this.get_token_id() == 'left_paren') {
+			// ( が出現したら
+			this.push_parse_node('iteration-statement');
+		} else {
+			// ( 以外が出現したら構文エラー
+			this.push_error_node('iteration-statement', 'not_found_left_paren');
+			// contextにエラーを設定
+			this.set_current_context_error('not_found_left_paren');
+		}
+
+		// expression解析へ以降する
+		this.switch_new_context('expression', 'expr', 'statement_do_state');
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * do statement while ( expr まで検出
+	 */
+	private parse_statement_do_state(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ) チェック
+		if (this.get_token_id() == 'right_paren') {
+			// ) が出現したら
+			this.push_parse_node('iteration-statement');
+		} else {
+			// ) 以外が出現したら構文エラー
+			this.push_error_node('iteration-statement', 'not_found_right_paren');
+			// contextにエラーを設定
+			this.set_current_context_error('not_found_right_paren');
+		}
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ; チェック
+		if (this.get_token_id() == 'right_paren') {
+			// ; が出現したら
+			this.push_parse_node('iteration-statement');
+		} else {
+			// ; 以外が出現したら構文エラー
+			this.push_error_node('iteration-statement', 'not_found_semicolon');
+			// contextにエラーを設定
+			this.set_current_context_error('not_found_semicolon');
+		}
+
+		return true;
+	}
+	/**
+	 * statement解析
+	 * for ( expr まで検出
+	 */
+	private parse_statement_for_lp(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		let is_expr: boolean = this.is_expression_token();
+		let is_decl: boolean = this.is_declaration_token();
+		if (this.get_token_id() == 'semicolon') {
+			// ; が出現したら次の解析へ
+			this.state = 'statement_for_lp_t';
+		} else if (is_expr && is_decl) {
+			// expression と declaration 重複
+			// 重複するのはidentifierのみ
+			if (this.is_typedef_token()) {
+				// typedef-nameであればdeclarationのcontext
+				this.switch_new_context('declaration', 'declaration', 'statement_for_lp_t');
+			} else {
+				// typedef-nameでなければ判定不可なのでidentifier解析へ
+				this.switch_new_context('@undecided', 'statement_for_lp_id', 'statement_for_lp_t');
+			}
+		} else if (is_expr) {
+			// expressionに該当ならexpression解析へ
+			this.switch_new_context('expression', 'expr', 'statement_for_lp_t');
+		} else if (is_decl) {
+			// declarationに該当ならdeclaration解析へ
+			this.switch_new_context('declaration', 'declaration', 'statement_for_lp_t');
+		} else {
+			// その他tokenは構文エラー
+			this.push_error_node('iteration-statement', 'unexpected-token');
+			// contextにエラーを設定
+			this.set_current_context_error('unexpected-token');
+			// 解析終了
+			finish = true;
+		}
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * for ( identifier まで検出
+	 */
+	private parse_statement_for_lp_id(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// expression or declarator の判定を実施
+		// typedefの解析をしっかり行えば不要な判定なので
+		// 強引に先読みして判定を実施する。
+		let la_fin: boolean = false;
+		let id: token_id;
+		let pos: number = 0;			// 現在出現しているのがid、その次から見たいので[0]開始→[1]から検索
+		let is_decl: boolean;
+		let is_expr: boolean;
+		let id_stack: token_id[] = [];
+
+		// 判定：1token先読み
+		// 空白文字以外のtokenを取得
+		[id, pos] = this.get_token_id_if_not_whitespace(pos + 1);
+		switch (id) {
+			// expression context
+			// exprのcontextにおいてidに続くtoken
+			case 'dot':
+			case 'arrow_op':
+			case 'increment_op':
+			case 'decrement_op':
+				this.set_current_context('expression');
+				this.state = 'expr';
+				la_fin = true;
+				break;
+
+			// declaration context
+			// idに続くtoken
+			case 'typedef':
+			case 'extern':
+			case 'static':
+			case 'auto':
+			case 'register':
+			case 'void':
+			case 'char':
+			case 'short':
+			case 'int':
+			case 'long':
+			case 'int':
+			case 'long':
+			case 'float':
+			case 'double':
+			case 'signed':
+			case 'unsigned':
+			case '_Bool':
+			case '_Complex':
+			case 'struct':
+			case 'union':
+			case 'enum':
+			case 'identifier':
+			case 'const':
+			case 'restrict':
+			case 'volatile':
+			case 'inline':
+				this.set_current_context('declaration');
+				this.state = 'declaration';
+				la_fin = true;
+				break;
+
+			// 重複
+			case 'left_bracket':
+			case 'left_paren':
+			case 'comma':
+			case 'asterisk':
+				// 次の解析へ
+				la_fin = false;
+				id_stack.push(id);
+				// declarationのcontextでは再度decl tokenが出現する
+				is_decl = this.is_declaration_token(id);
+				// expressionのcontextでは再度expr tokenが出現する
+				is_expr = this.is_expression_token(id);
+				break;
+
+			// EOF
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('postfix-expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				la_fin = true;
+				finish = true;
+				break;
+			default:
+				// その他tokenは構文エラー、そのまま解析継続
+				this.set_current_context_error('unexpected-token');
+				break;
+		}
+
+		if (!la_fin) {
+			// 判定：2token先読み
+			// 空白文字以外のtokenを取得
+			[id, pos] = this.get_token_id_if_not_whitespace(pos + 1);
+			// declarationのcontextでは再度decl tokenが出現する
+			is_decl = this.is_declaration_token(id);
+			// expressionのcontextでは再度expr tokenが出現する
+			is_expr = this.is_expression_token(id);
+
+			if (is_decl && !is_expr) {
+				this.set_current_context('declaration');
+				this.state = 'declaration';
+				la_fin = true;
+			} else if (!is_decl && is_expr) {
+				this.set_current_context('expression');
+				this.state = 'expr';
+				la_fin = true;
+			} else {
+				switch (id_stack[0]) {
+					case 'left_bracket':
+						if (id == 'right_bracket') {
+							this.set_current_context('declaration');
+							this.state = 'declaration';
+							la_fin = true;
+						}
+						break;
+					case 'left_paren':
+						if (id == 'right_paren') {
+							this.set_current_context('declaration');
+							this.state = 'declaration';
+							la_fin = true;
+						}
+						break;
+					case 'comma':
+						break;
+					case 'asterisk':
+						break;
+				}
+
+			}
+
+		}
+
+		if (!la_fin) {
+			// 2つ先読みしてダメならexprに断定
+			this.set_current_context('expression');
+			this.state = 'expr';
+			la_fin = true;
+		}
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * for ( token まで検出
+	 */
+	private parse_statement_for_lp_t(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ; チェック
+		if (this.get_token_id() == 'semicolon') {
+			// ; が出現したら
+			this.push_parse_node('iteration-statement');
+		} else {
+			// ; 以外が出現したら構文エラー
+			this.push_error_node('iteration-statement', 'not_found_semicolon');
+			// contextにエラーを設定
+			this.set_current_context_error('not_found_semicolon');
+		}
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ; チェック
+		if (this.get_token_id() == 'semicolon') {
+			// ; が出現したら次の解析へ
+			this.state = 'statement_for_lp_t_s_expr';
+		} else {
+			// ; 以外ならexpression解析へ
+			this.switch_new_context('expression', 'expr', 'statement_for_lp_t_s_expr');
+		}
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * for ( token ; expr まで検出
+	 */
+	private parse_statement_for_lp_t_s_expr(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ; チェック
+		if (this.get_token_id() == 'semicolon') {
+			// ; が出現したら
+			this.push_parse_node('iteration-statement');
+		} else {
+			// ; 以外が出現したら構文エラー
+			this.push_error_node('iteration-statement', 'not_found_semicolon');
+			// contextにエラーを設定
+			this.set_current_context_error('not_found_semicolon');
+		}
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ) チェック
+		if (this.get_token_id() == 'right_paren') {
+			// ) が出現したら次の解析へ
+			this.state = 'statement_for_lp_t_s_expr_s_expr';
+		} else {
+			// ) 以外ならexpression解析へ
+			this.switch_new_context('expression', 'expr', 'statement_for_lp_t_s_expr_s_expr');
+		}
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * for ( token ; expr ; expr まで検出
+	 */
+	private parse_statement_for_lp_t_s_expr_s_expr(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ) チェック
+		if (this.get_token_id() == 'semicolon') {
+			// ) が出現したら
+			this.push_parse_node('iteration-statement');
+		} else {
+			// ) 以外が出現したら構文エラー
+			this.push_error_node('iteration-statement', 'not_found_right_paren');
+			// contextにエラーを設定
+			this.set_current_context_error('not_found_right_paren');
+		}
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// statement チェック
+		if (this.is_statement()) {
+			// statement が出現したら解析へ
+			this.switch_new_context('statement', 'statement', 'statement_for_lp_t_s_expr_s_expr_rp_state');
+		} else {
+			// statement 以外なら構文エラー
+			// 解析ツリーに出現トークンを登録
+			this.push_error_node('statement', 'unexpected-token');
+			// contextにエラーを設定
+			this.set_current_context_error('unexpected-token');
+			// 解析終了
+			finish = true;
+		}
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * for ( token ; expr ; expr ) state まで検出
+	 */
+	private parse_statement_for_lp_t_s_expr_s_expr_rp_state(): boolean {
+		return true;
+	}
+	/**
+	 * statement解析
+	 * return statement まで検出
+	 */
+	private parse_statement_return(): boolean {
+		let finish: boolean;
+		finish = true;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ; チェック
+		if (this.get_token_id() == 'semicolon') {
+			// ; が出現したら
+			this.push_parse_node('jump-statement');
+		} else {
+			// ; 以外が出現したら構文エラー
+			this.push_error_node('jump-statement', 'not_found_semicolon');
+			// contextにエラーを設定
+			this.set_current_context_error('not_found_semicolon');
+		}
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * { まで検出、ただしpushしていない
+	 */
+	private parse_statement_compound(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// { を登録
+		this.push_parse_node('compound-statement');
+
+		// 次状態へ遷移
+		this.state = 'statement_compound_lb';
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * { まで検出
+	 */
+	private parse_statement_compound_lb(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// statement or declaration の繰り返しになる
+		// } が出現したら終了
+		switch (this.get_token_id()) {
+			case 'right_brace':
+				this.push_parse_node('compound-statement');
+				finish = true;
+				break;
+
+			default:
+				// contextを判定
+				let ctx: parse_context;
+				let pos: number;
+				[ctx, pos] = this.lookahead_jdg_state_decl();
+				switch (ctx) {
+					case 'declaration':
+						this.switch_new_context('declaration', 'declaration', 'statement_compound_lb');
+						break;
+					case 'statement':
+						this.switch_new_context('statement', 'statement', 'statement_compound_lb');
+						break;
+					case '@undecided':
+					default:
+						// その他は構文エラー
+						this.push_error_node('compound-statement', 'unexpected-token');
+						// contextにエラーを設定
+						this.set_current_context_error('unexpected-token');
+						finish = true;
+						break;
+				}
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * statement解析
+	 * expression
+	 */
+	private parse_statement_expr(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ; が出現したら終了
+		switch (this.get_token_id()) {
+			case 'semicolon':
+				this.push_parse_node('expression-statement');
+				finish = true;
+				break;
+
+			default:
+				// その他は構文エラー
+				this.push_error_node('expression-statement', 'unexpected-token');
+				// contextにエラーを設定
+				this.set_current_context_error('unexpected-token');
+				finish = true;
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * statement解析完了
+	 */
+	private parse_statement_end(): boolean {
+		return true;
+	}
+
+	/**
 	 * function-definition解析
 	 * declaration-specifiers declarator まで検出した状態から解析する
 	 */
@@ -2859,11 +4524,21 @@ export default class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'left_brace':
 				// { が出現したらcompound-statementの解析開始
-				this.switch_new_context('compound-statement', 'compound-statement', 'func-def_end');
-				this.state = 'func-def_decl-spec_decl_states';
+				this.switch_new_context('compound-statement', 'statement_compound', 'func-def_end');
+				break;
+
+			case 'EOF':
+				// EOFは構文エラー
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('declaration', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				// 解析終了
+				this.state = 'EOF';
+				finish = true;
 				break;
 
 			default:
@@ -2892,10 +4567,11 @@ export default class parser {
 
 		this.set_current_context_error('unexpected-token');
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'EOF':
 				// EOFは解析終了
 				this.push_error_node('function-definition', 'EOF_in_parse');
+				this.state = 'EOF';
 				finish = true;
 				break;
 
@@ -2919,11 +4595,43 @@ export default class parser {
 	}
 
 	/**
+	 * Preprocessing directives
+	 * group-part まで出現
+	 */
+	private parse_pp_group_part(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		switch (this.get_token_id()) {
+			case 'NEWLINE':
+				// 改行が出現するまでは解析継続する
+				this.push_parse_node('pp-directive');
+				finish = true;
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('pp-directive', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			case 'pp_token':
+				// 解析継続
+				this.push_parse_node('pp-directive');
+				break;
+		}
+
+		return finish;
+	}
+
+	/**
 	private parse_(): boolean {
 		let finish: boolean;
 		finish = false;
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 		}
 
 		return finish;
@@ -2931,16 +4639,159 @@ export default class parser {
 
 	 */
 
+
+	/**
+	 * context解析
+	 * statement か declaration が出現するcontextにおいて、
+	 * どちらが出現したかをtoken先読みで判定する。
+	 */
+	private lookahead_jdg_state_decl(pos:number = 0): [parse_context,number] {
+		let la_fin: boolean = false;
+		let id: token_id;
+		let id_stack: token_id[] = [];
+		let is_decl: boolean;
+		let is_expr: boolean;
+
+		let result: parse_context = '@undecided';
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// 判定：1st token
+		// 空白文字以外のtokenを取得
+		[id, pos] = this.get_token_id_if_not_whitespace(pos);
+		// 先頭token判定
+		is_decl = this.is_declaration_token(id);
+		is_expr = this.is_statement(id);
+		if (is_decl && is_expr) {
+			// token重複
+			// identifierのみ重複のはず
+			// tokenを先読みして判定する
+		} else if (is_decl) {
+			// declarationで確定
+			return ['declaration',pos];
+		} else if (is_expr) {
+			// expressionで確定
+			return ['statement',pos];
+		} else {
+			// 規定外のtoken出現
+			return ['@undecided',pos];
+		}
+
+		// identifier が expression or declarator か判定を実施
+		// typedefの解析をしっかり行えば不要な判定なので
+		// 強引に先読みして判定を実施する。
+
+		// 判定：2nd token
+		// 空白文字以外のtokenを取得
+		[id, pos] = this.get_token_id_if_not_whitespace(pos + 1);
+		switch (id) {
+			// expression context
+			// idに続くtoken
+			case 'dot':
+			case 'arrow_op':
+			case 'increment_op':
+			case 'decrement_op':
+				return ['statement', pos];
+				break;
+
+			// declaration context
+			// idに続くtoken
+			case 'typedef':
+			case 'extern':
+			case 'static':
+			case 'auto':
+			case 'register':
+			case 'void':
+			case 'char':
+			case 'short':
+			case 'int':
+			case 'long':
+			case 'int':
+			case 'long':
+			case 'float':
+			case 'double':
+			case 'signed':
+			case 'unsigned':
+			case '_Bool':
+			case '_Complex':
+			case 'struct':
+			case 'union':
+			case 'enum':
+			case 'identifier':
+				// expressionのcontextではidentifierは2回登場しない
+			case 'const':
+			case 'restrict':
+			case 'volatile':
+			case 'inline':
+				return ['declaration', pos];
+				break;
+
+			// 重複
+			case 'semicolon':
+				// ; でcontext終了
+				// 判断がつかないのでdeclarationに丸める
+				return ['declaration', pos];
+				break;
+			case 'left_bracket':
+			case 'left_paren':
+			case 'comma':
+			case 'asterisk':
+				// これらの後にはどちらも出現しうる
+				// 次の解析へ
+				id_stack.push(id);
+				break;
+
+			default:
+				// 規定外のtoken出現
+				return ['@undecided', pos];
+				break;
+		}
+
+		// 判定：3rd token
+		// 空白文字以外のtokenを取得
+		[id, pos] = this.get_token_id_if_not_whitespace(pos + 1);
+		switch (id_stack[0]) {
+			case 'left_bracket':
+				// 中身が空のカッコはdeclarator
+				if (id == 'right_bracket') {
+					return ['declaration', pos];
+				}
+				break;
+			case 'left_paren':
+				// 中身が空のカッコはdeclarator
+				if (id == 'right_paren') {
+					return ['declaration', pos];
+				}
+				break;
+			case 'comma':
+			case 'asterisk':
+				break;
+		}
+		// 再帰的に判定実施
+		[result, pos] = this.lookahead_jdg_state_decl(pos);
+		// 判定完了していたら終了
+		if (result != '@undecided') {
+			return [result, pos];
+		}
+
+		// ここまででダメならひとまずdeclarationとみなす
+		return ['declaration', pos];
+	}
+
+
 	 private skip_whitespace() {
 		 while (this.is_whitespace()) {
 			 this.push_parse_node('@WHITESPACE');
 		 }
 	 }
-	private is_whitespace(): boolean {
+	private is_whitespace(id?: token_id): boolean {
 		let result: boolean;
 		result = false;
 
-		switch (this.get_curr_token_id()) {
+		if (!id) id = this.get_token_id();
+
+		switch (id) {
 			case 'WHITESPACE':
 			case 'NEWLINE':
 			case 'COMMENT':
@@ -2956,39 +4807,41 @@ export default class parser {
 	 /**
 	  * 出現しているtokenがdeclarationの開始tokenか判定する
 	  */
-	private is_declaration_token(): boolean {
+	private is_declaration_token(id?: token_id): boolean {
 		let result: boolean;
 		result = false;
 
-		 switch (this.get_curr_token_id()) {
-			 // storage-class-specifier
-			 case 'typedef':
-			 case 'extern':
-			 case 'static':
-			 case 'auto':
-			 case 'register':
-			 // type-qualifier
-			 case 'const':
-			 case 'restrict':
-			 case 'volatile':
-			 // function specifier
-			 case 'inline':
-			 // type-specifier
-			 case 'void':
-			 case 'char':
-			 case 'short':
-			 case 'int':
-			 case 'long':
-			 case 'float':
-			 case 'double':
-			 case 'signed':
-			 case 'unsigned':
-			 case '_Bool':
-			 case '_Complex':
-			 case 'struct':
-			 case 'union':
-			 case 'enum':
-			 case 'identifier':
+		if (!id) id = this.get_token_id();
+
+		switch (id) {
+			// storage-class-specifier
+			case 'typedef':
+			case 'extern':
+			case 'static':
+			case 'auto':
+			case 'register':
+			// type-qualifier
+			case 'const':
+			case 'restrict':
+			case 'volatile':
+			// function specifier
+			case 'inline':
+			// type-specifier
+			case 'void':
+			case 'char':
+			case 'short':
+			case 'int':
+			case 'long':
+			case 'float':
+			case 'double':
+			case 'signed':
+			case 'unsigned':
+			case '_Bool':
+			case '_Complex':
+			case 'struct':
+			case 'union':
+			case 'enum':
+			case 'identifier':
 				result = true;
 				break;
 		 }
@@ -2997,13 +4850,35 @@ export default class parser {
 	 }
 
 	/**
-	 * 現在出現しているtokenがexpressionの開始tokenかどうか判定する
+	 * 出現しているtokenがdeclaratorの開始tokenか判定する
 	 */
-	private is_expression_token(): boolean {
+	private is_declarator_token(id?: token_id): boolean {
 		let result: boolean;
 		result = false;
 
-		switch (this.get_curr_token_id()) {
+		if (!id) id = this.get_token_id();
+
+		switch (id) {
+			case 'asterisk':
+			case 'left_paren':
+			case 'identifier':
+				result = true;
+				break;
+		}
+
+		return result;
+	}
+
+	/**
+	 * 現在出現しているtokenがexpressionの開始tokenかどうか判定する
+	 */
+	private is_expression_token(id?: token_id): boolean {
+		let result: boolean;
+		result = false;
+
+		if (!id) id = this.get_token_id();
+
+		switch (id) {
 			// primary-expression
 			//	identifier
 			//	constant
@@ -3049,29 +4924,74 @@ export default class parser {
 	}
 
 	/**
-	 * 現在出現しているtokenがtype-nameかどうか判定する
+	 * tokenがstatement開始tokenか判定する
+	 * @param id 
 	 */
-	private is_typedef_token(): boolean {
+	private is_statement(id?: token_id): boolean {
 		let result: boolean;
-		result = (this.typedef_tbl.indexOf(this.lexer.token) != undefined);
+		result = false;
+
+		if (!id) id = this.get_token_id();
+
+		switch (id) {
+			case 'case':
+			case 'default':
+			case 'left_brace':
+			case 'semicolon':
+			case 'if':
+			case 'switch':
+			case 'while':
+			case 'do':
+			case 'for':
+			case 'goto':
+			case 'continue':
+			case 'break':
+			case 'return':
+				result = true;
+				break;
+			case 'identifier':
+				result = true;
+				break;
+			default:
+				if (this.is_expression_token(id)) result = true;
+				break;
+		}
+
 		return result;
 	}
 
 	/**
-	 * 現在出現しているtokenがdeclaration-specifierかどうか判定する
+	 * 現在出現しているtokenがtypedef-nameかどうか判定する
 	 */
-	private is_decl_specifier_token(): boolean {
+	private is_typedef_token(): boolean {
+		let result: boolean;
+		let token: string = this.get_token_str();
+		result = (this.typedef_tbl.indexOf(token) != -1);
+		return result;
+	}
+
+	/**
+	 * 現在出現しているtokenがtype-nameかどうか判定する
+	 */
+	private is_typename_token(): boolean {
 		let result: boolean;
 		result = false;
 
-		switch (this.get_curr_token_id()) {
-			// strage-class-specifier
-			case 'typedef':
-			case 'extern':
-			case 'static':
-			case 'auto':
-			case 'register':
-			// type-specifier
+		if (this.is_type_specifier_token() && this.is_type_qualifier_token()) {
+			result = true;
+		}
+
+		return result;
+	}
+
+	/**
+	 * 現在出現しているtokenがtype-specifierかどうか判定する
+	 */
+	private is_type_specifier_token(): boolean {
+		let result: boolean;
+		result = false;
+
+		switch (this.get_token_id()) {
 			case 'void':
 			case 'char':
 			case 'short':
@@ -3086,20 +5006,8 @@ export default class parser {
 			case 'struct':
 			case 'union':
 			case 'enum':
-			// type-qualifier
-			case 'const':
-			case 'restrict':
-			case 'volatile':
-			// function specifier
-			case 'inline':
-				result = true;
-				break;
-
 			case 'identifier':
-				// identifierはtypedef-nameか判定が必要
-				if (this.is_typedef_token()) {
-					result = true;
-				}
+				result = true;
 				break;
 		}
 
@@ -3113,7 +5021,7 @@ export default class parser {
 		let result: boolean;
 		result = false;
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'const':
 			case 'restrict':
 			case 'volatile':
@@ -3131,7 +5039,7 @@ export default class parser {
 		let result: boolean;
 		result = false;
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'asterisk':
 			case 'left_paren':
 			case 'left_bracket':
@@ -3149,7 +5057,7 @@ export default class parser {
 		let result: boolean;
 		result = false;
 
-		switch (this.get_curr_token_id()) {
+		switch (this.get_token_id()) {
 			case 'dot':
 			case 'left_bracket':
 				result = true;
@@ -3159,18 +5067,75 @@ export default class parser {
 		return result;
 	}
 
+
 	/**
-	 * 現在出現しているtokenをtypedefとして登録
+	 * declarationの評価を実施
 	 */
-	private push_typedef() {
-		this.typedef_tbl.push(this.lexer.token);
+	private eval_declaration(tgt_node?: parse_tree_node): boolean {
+		let result: boolean;
+		result = true;
+
+		// 引数未指定であれば現在contextを対象とする
+		if (tgt_node == undefined) {
+			tgt_node = this.get_curr_node();
+		}
+
+		// declaration評価
+		let decl_spec_node: parse_tree_node | null = null;
+		let decl_node: parse_tree_node | null = null;
+		let has_decl_spec: boolean = false;
+		let has_decl: boolean = false;
+		let has_err: boolean = false;
+		tgt_node.child.forEach(node => {
+			if (node.err_info != 'null') has_err = true;
+			if (node.context == 'declaration-specifier') {
+				decl_spec_node = node;
+				has_decl_spec = true;
+			}
+			if (node.context == 'declarator') {
+				decl_node = node;
+				has_decl = true;
+			}
+		});
+
+		if (!has_err) {
+			if (has_decl_spec && has_decl) {
+				// 現在のcontextがtypedefであれば処理を実施
+				if (decl_spec_node != null && decl_spec_node!.is_typedef) {
+					this.eval_typedef(decl_spec_node!, decl_node!);
+				}
+			}
+		}
+
+		return result;
+	}
+	/**
+	 * declaration-specifierがtypedefのcontextであったとき、
+	 * 型情報の登録を行う
+	 */
+	private eval_typedef(decl_spec_node: parse_tree_node, decl_node: parse_tree_node) {
+		decl_node.child.forEach(node => {
+			if (node.lex?.id == 'identifier') this.push_typedef(node.lex.token);
+		});
+		const tgt_node = decl_node.child.find( node => (node.lex) && (node.lex.id == 'identifier') );
+		if (tgt_node && tgt_node.lex) {
+			this.push_typedef(tgt_node.lex.token);
+		}
+	}
+
+	/**
+	 * typedefとして登録
+	 */
+	private push_typedef(id: string) {
+		this.typedef_tbl.push(id);
 	}
 
 	/**
 	 * 現在出現しているtokenをenumeration-constantとして登録
 	 */
 	private push_enum_const() {
-		this.enum_tbl.push(this.lexer.token);
+		let token: string = this.get_token_str();
+		this.enum_tbl.push(token);
 	}
 
 	/**
@@ -3189,6 +5154,27 @@ export default class parser {
 		this.state = next_state;
 	}
 	/**
+	 * コンテキストスイッチ前の状態に復帰する。
+	 * 復帰先の状態が無ければ何もしない。
+	 */
+	private switch_old_context(): boolean {
+		let sw_exe: boolean = false;
+		let next_state: parser_state | undefined;
+		next_state = this.state_stack_tbl.pop();
+
+		if (next_state) {
+			// 状態遷移設定
+			this.state = next_state;
+			// 解析ツリー復帰
+			this.pop_parse_tree();
+
+			sw_exe = true;
+		}
+
+		return sw_exe;
+	}
+
+	/**
 	 * 現在解析中のコンテキストが確定したときにコールする。
 	 * 対象解析ツリーのコンテキストを設定する。
 	 * @param ctx 
@@ -3199,10 +5185,13 @@ export default class parser {
 	private set_current_context_error(err: parse_error_info) {
 		this.tgt_node.err_info = err;
 	}
+	private set_current_context_is_typedef(flag: boolean = true) {
+		this.tgt_node.is_typedef = flag;
+	}
 	/**
 	 * 構文未確定で解析を進め、構文が確定したタイミングで、過去tokenに対してctx(,error)を設定する。
 	 * 現在tokenはまだpushしていない状況で使用する。
-	 * （使用状況イメージ：　this.tgt_node.child==以前までのtoken, this.lexer==現在のtoken）
+	 * （使用状況イメージ：　this.tgt_node.child==以前までのtoken, this.token_stack==現在以降のtoken）
 	 * @param rel_idx 	セット対象tokenが何個前か指定する。(1:1個前, 2:2個前, ...)
 	 * @param ctx 		設定context
 	 * @param err_info 	設定error_info
@@ -3230,13 +5219,27 @@ export default class parser {
 		this.tgt_node.child[new_len - 1].parent = this.tgt_node;
 		this.tgt_node = this.tgt_node.child[new_len-1];
 	}
+	private pop_parse_tree(): parse_tree_node | null  {
+		let curr_node: parse_tree_node | null;
+
+		// 復帰先チェック
+		if (this.tgt_node.parent) {
+			curr_node = this.tgt_node;
+			this.tgt_node = this.tgt_node.parent;
+			//ここでpopするかどうかでバッファに残すかどうかが変わる
+			//curr_node = this.tgt_node.child.pop()!;
+		} else {
+			curr_node = null;
+		}
+
+		return curr_node;
+	}
 	/**
 	 * tgt_nodeに字句nodeを追加する。
 	 * nodeを追加したらlexerは次tokenを取得する
 	 */
 	private push_parse_node(ctx: parse_context, err_info:parse_error_info='null') {
 		this.tgt_node.child.push(this.get_new_node(ctx, err_info));
-		this.lexer.exec();
 	}
 	/**
 	 * tgt_nodeにエラーnodeを追加する。
@@ -3246,12 +5249,132 @@ export default class parser {
 		this.tgt_node.child.push(this.get_empty_node(ctx, err_info));
 	}
 
+
+
+	/**
+	 * Lexerからtokenを取得する。
+	 * 取得したtokenはスタックしておく。
+	 * 解析時は[0]が現在解析中のtoken、[1]以降がLookAheadで取得したtokenとする。
+	 * tokenはnodeを追加するたびにFIFOで取り出してnodeと紐づける
+	 */
+	private get_new_token(num: number = 1) {
+		for (let i=0; i<num; i++) {
+			// Lexer解析実施
+			this.lexer.exec();
+			// 取得したtokenをスタックする
+			this.token_stack.push({
+				id: this.lexer.id,
+				sub_id: this.lexer.sub_id,
+				token: this.lexer.token,
+				row: this.lexer.row,
+				col: this.lexer.col,
+				len: this.lexer.len,
+				pos: this.lexer.pos,
+			});
+		}
+	}
+	/**
+	 * token stack からidxで指定したtokenを返す。
+	 * LookAhead対応。idxが1以上であればtokenを取得して先読みをする。
+	 */
+	private get_token(idx: number = 0): lex_info {
+		// 指定された数だけtokenがスタックされているかチェック
+		if (this.token_stack.length <= idx) {
+			// 不足分を取得：先読み
+			this.get_new_token(idx - this.token_stack.length + 1);
+		}
+		// 指定されたtokenを返す
+		return this.token_stack[idx];
+	}
+	private get_token_if(pred: (token: lex_info) => boolean, pos: number = 0): [lex_info, number] {
+		let token_: lex_info;
+		do {
+			token_ = this.get_token(pos);
+			pos++;
+		} while (!pred(token_));
+		return [token_, pos-1];
+	}
+	/**
+	 * token stack からidxで指定したtokenのidを返す
+	 */
+	private get_token_id(idx: number = 0): token_id {
+		return this.get_token(idx).id;
+	}
+	private get_token_id_if(pred: (token: lex_info) => boolean, pos: number = 0): [token_id, number] {
+		let token: lex_info;
+		let new_pos: number;
+		[token, new_pos] = this.get_token_if(pred, pos);
+		return [token.id, new_pos];
+	}
+	private get_token_id_if_not_whitespace(pos: number = 0): [token_id, number] {
+		let token: lex_info;
+		let new_pos: number;
+		[token, new_pos] = this.get_token_if((token: lex_info) => !this.is_whitespace(token.id), pos);
+		return [token.id, new_pos];
+	}
+	/**
+	 * token stack からidxで指定したtokenのidを返す
+	 */
+	private get_token_str(idx: number = 0): string {
+		return this.get_token(idx).token;
+	}
+
+	/**
+	 * 現在解析中contextのnodeを返す
+	 */
+	private get_curr_node(): parse_tree_node {
+		return this.tgt_node;
+	}
 	/**
 	 * 現在出現しているtoken idを返す
 	 */
-	private get_curr_token_id(): token_id {
-		return this.lexer.id;
+	private get_curr_ctx_is_typedef(): boolean {
+		return this.tgt_node.is_typedef;
 	}
+	/**
+	 * declaratorは()の入れ子により階層が深くなっている可能性がある。
+	 * declaratorが宣言している名前を示すidentifierを検索して返す
+	 */
+	private get_node_declarator_id(node: parse_tree_node): parse_tree_node | null {
+		// 先頭から探索して最初に出現するidentifierを取得する
+		let idx: number = 0;
+		let fin: boolean = false;
+		let tgt: parse_tree_node | null;
+		tgt = node;
+
+		while (!fin) {
+			if (tgt!.child[idx].lex) {
+				switch (tgt!.child[idx].lex!.id) {
+					case 'identifier':
+						// identifierを検出したら終了
+						tgt = tgt!.child[idx];
+						fin = true;
+						break;
+					case 'left_paren':
+						// ( を検出したら階層を下る
+						if (tgt!.child.length > idx+1) {
+							tgt = tgt!.child[idx+1];
+							idx = 0;
+						}
+						break;
+					default:
+						// その他tokenは無視
+						break;
+				}
+			}
+
+			idx++;
+			if (tgt!.child.length <= idx) {
+				fin = true;
+				tgt = null;
+			}
+		}
+		return tgt;
+	}
+	/**
+	 * 現在解析中のgrammarの中で前回までに出現したtokenを取得する
+	 * @param prev_count 何個前のcontextを取得するか。1=1個前
+	 */
 	private get_prev_node(prev_count: number = 1): { valid: boolean, node?: parse_tree_node } {
 		let result_valid: boolean;
 		let result_node: parse_tree_node;
@@ -3267,13 +5390,45 @@ export default class parser {
 			return { valid:false };
 		}
 	}
+	private get_prev_node_if(pred: (node: parse_tree_node) => boolean, prev_count: number = 1): { valid: boolean, node?: parse_tree_node } {
+		let result_valid: boolean;
+		let result_node: parse_tree_node;
+		let idx: number;
+
+		// 指定されたインデックスがこれまでに出現したnode数以上であれば処理実施
+		if (prev_count > 0 && this.tgt_node.child.length > prev_count) {
+			// 前回コンテキスト参照インデックスを作成
+			idx = this.tgt_node.child.length - prev_count;
+			// nodeを検索
+			while (idx > -1 && prev_count > 0) {
+				if (pred(this.tgt_node.child[idx])) {
+					result_node = this.tgt_node.child[idx];
+					prev_count--;
+				}
+				idx--;
+			}
+		}
+		// nodeが見つかっていれば正常値を返す
+		if (prev_count == 0) {
+			return { valid: true, node: result_node! };
+		} else {
+			return { valid: false };
+		}
+	}
+	private get_prev_node_if_not_whitespace(prev_count: number = 1): { valid: boolean, node?: parse_tree_node } {
+		let { valid, node } = this.get_prev_node_if((node: parse_tree_node) => (node.lex == null || !this.is_whitespace(node.lex!.id)), prev_count);
+		if (valid) {
+			return { valid: true, node: node! }
+		}
+		else {
+			return { valid: false };
+		}
+	}
 	/**
 	 * 現在解析中のgrammarの中で前回までに出現したtokenのcontextを取得する
 	 * @param prev_count 何個前のcontextを取得するか。1=1個前
 	 */
 	private get_prev_ctx(prev_count: number = 1): { valid: boolean, ctx?: parse_context } {
-		let result: parse_context = 'null';
-
 		let {valid, node} = this.get_prev_node(prev_count);
 
 		if (valid) {
@@ -3281,6 +5436,20 @@ export default class parser {
 		}
 		else {
 			return { valid: false };
+		}
+	}
+	/**
+	 * 現在解析中のgrammarの中で前回までに出現したtokenのis_typedefを取得する
+	 * @param prev_count 何個前のcontextを取得するか。1=1個前
+	 */
+	private get_prev_ctx_is_typedef(prev_count: number = 1): boolean {
+		let { valid, node } = this.get_prev_node(prev_count);
+
+		if (valid) {
+			return node!.is_typedef;
+		}
+		else {
+			return false;
 		}
 	}
 
@@ -3292,6 +5461,7 @@ export default class parser {
 			parent: null,
 			lex: null,
 			err_info: err_info_,
+			is_typedef: false,
 		};
 		return node;
 	}
@@ -3301,17 +5471,12 @@ export default class parser {
 			context: ctx,
 			child: [],
 			parent: null,
-			lex: {
-				id: this.lexer.id,
-				sub_id: this.lexer.sub_id,
-				token: this.lexer.token,
-				row: this.lexer.row,
-				col: this.lexer.col,
-				len: this.lexer.len,
-				pos: this.lexer.pos,
-			},
+			//lex: this.token_stack.shift()!,
+			lex: null,
 			err_info: err_info_,
+			is_typedef: false,
 		};
+		node.lex = this.token_stack.shift()!;
 		return node;
 	}
 	private get_empty_node(ctx: parse_context, err_info_: parse_error_info = 'null'): parse_tree_node {
@@ -3320,16 +5485,9 @@ export default class parser {
 			context: ctx,
 			child: [],
 			parent: null,
-			lex: {
-				id: 'null',
-				sub_id: 'null',
-				token: "",
-				row: 0,
-				col: 0,
-				len: 0,
-				pos: 0,
-			},
+			lex: null,
 			err_info: err_info_,
+			is_typedef: false,
 		};
 		return node;
 	}
