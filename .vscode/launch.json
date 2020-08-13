@@ -15,6 +15,7 @@
             //"program": "${workspaceFolder}\\out\\test\\test.js",
             //"program": "${workspaceFolder}/out/test/test_lexer.js",
             "program": "${workspaceFolder}/out/test/test_parser.js",
+            "cwd": "${workspaceFolder}",
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
             ],
