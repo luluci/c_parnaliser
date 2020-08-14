@@ -2492,8 +2492,14 @@ export class parser {
 				break;
 
 			case 'EOF':
+				// EOFで解析終了
 				this.state = 'EOF';
+				finish = true;
+				break;
+
 			default:
+				// identifierだけで終了したら変数宣言と確定
+				this.set_current_context('declarator_var');
 				// その他tokenが出現したらdeclarator解析完了とする
 				finish = true;
 				break;

@@ -1,10 +1,11 @@
 'use strict';
 
 import fs from 'fs';
+import path from 'path';
 import { parser, parse_tree_node, lex_info } from '../src/parser'
 
 
-function parser_tree_dump(tree: parse_tree_node) {
+function parser_tree_dump(tree: parse_tree_node, out_fd: number) {
 	let buff: {caption:string, lang:string}[];
 	let is_eof: boolean = false;
 
@@ -13,6 +14,10 @@ function parser_tree_dump(tree: parse_tree_node) {
 	is_eof = parser_tree_node_dump(tree, buff);
 
 	for (let output of buff) {
+		// file
+		fs.writeSync(out_fd, output.caption + "\r\n");
+		fs.writeSync(out_fd, output.lang + "\r\n");
+		// stdout
 		console.log(output.caption);
 		console.log(output.lang);
 	}
@@ -72,6 +77,11 @@ function parser_test(file_path: string) {
 	let text: string;
 	buffer = fs.readFileSync(file_path);
 	text = buffer.toString();
+	//出力先を作成
+	let outfile_path:string;
+	let parse_file_path = path.parse(file_path);
+	outfile_path = parse_file_path.dir + "/" + parse_file_path.name + "_out" + parse_file_path.ext;
+	const fd = fs.openSync(outfile_path, "w");
 	// parser作成
 	let parse: parser;
 	parse = new parser(text);
@@ -81,9 +91,10 @@ function parser_test(file_path: string) {
 	while (parse.exec()) {
 		tree = parse.parse_tree;
 	}
-	parser_tree_dump(parse.parse_tree);
+	parser_tree_dump(parse.parse_tree, fd);
 	console.log("@test finish");
 }
 
-parser_test('./test/test_parser_valid_1.c');
+//parser_test('./test/test_parser_valid_1.c');
+parser_test('./test/test_parser_valid_2.c');
 
