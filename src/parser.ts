@@ -234,6 +234,21 @@ export type lex_info = {
 	len: number;
 	pos: number;
 }
+// identifier: 変数名, 関数名, typedef の情報
+export type ident_type_info = 'null' | 'void' | 'char' | 'short' | 'int' | 'long' | 'long long' | 'float' | 'double' | '_Bool' | '_Complex';
+export type ident_info = {
+	token: string;
+	// type attr(specifier, qualifier)
+	type: ident_type_info;
+	is_signed: boolean;		// true:signed, false:unsigned
+	is_static: boolean;
+	is_const: boolean;
+	is_inline: boolean;
+	// info属性
+	is_ident_var: boolean;
+	is_ident_func: boolean;
+	is_typedef: boolean;
+}
 
 export class parser {
 	private lexer: lexer<tokenizer_c, token_id, token_sub_id>;
@@ -243,11 +258,13 @@ export class parser {
 	private tree: parse_tree_node;				// 解析ツリーもどきroot
 	private token_stack: lex_info[];			// LookAheda用のLexerTokenスタック
 	private tgt_node: parse_tree_node;			// 現コンテキストの解析ツリーもどきへの参照
-	private typedef_tbl: string[];				// ユーザ定義型(typedef)テーブル, struct/unionはtypedefしなければidentifier単独で出現しないため、ここには登録しない
+	private ident_var_tbl: ident_info[];		// 変数名テーブル:declaratorにより宣言される
+	private ident_func_tbl: ident_info[];		// 関数名テーブル:declaratorにより宣言される
+	private typedef_tbl: ident_info[];			// ユーザ定義型(typedef)テーブル, struct/unionはtypedefしなければidentifier単独で出現しないため、ここには登録しない
 	private enum_tbl: string[];					// enum定義テーブル
 	private state_stack_tbl: parser_state[];	// parser解析状態スタック：再帰処理をしないための遷移先管理テーブル
 	private is_type_appear: boolean;			// declaration-specifiersの解析内でtype-specifierが出現したかどうかのフラグ
-	private expr_enable_assign: boolean;				// expression解析フラグ：constant?
+	private expr_enable_assign: boolean;		// expression解析フラグ：constant?
 
 	constructor(text: string, cb?: cb_type) {
 		this.lexer = new lexer<tokenizer_c, token_id, token_sub_id>(tokenizer_c, text);
@@ -255,6 +272,8 @@ export class parser {
 		this.tree = this.get_empty_node('translation-unit');
 		this.token_stack = [];
 		this.tgt_node = this.tree;
+		this.ident_var_tbl = [];
+		this.ident_func_tbl = [];
 		this.typedef_tbl = [];
 		this.enum_tbl = [];
 		this.state_stack_tbl = [];
@@ -334,6 +353,7 @@ export class parser {
 					break;
 				case 'expr_impl_term':
 					finish = this.parse_expr_impl_term();
+					break;
 				case 'expr_impl_term_prim':
 					finish = this.parse_expr_impl_term_prim();
 					break;
@@ -1300,9 +1320,20 @@ export class parser {
 		if (is_typename && is_expression) {
 			// 両方成立しているとき
 			// 重複はidentifierのみ
-			this.push_parse_node('@undecided');
-			// 次の解析へ状態遷移
-			this.state = 'expr_impl_term_lp_id';
+			if (this.is_typedef_token()) {
+				// typename解析状態へ合流
+				this.set_current_context('type-name');
+			} else if (this.is_ident_var_token()) {
+				// expression解析状態へ合流
+				this.set_current_context('expression');
+			} else if (this.is_ident_func_token()) {
+				// expression解析状態へ合流
+				this.set_current_context('expression');
+			} else {
+				this.push_parse_node('@undecided');
+				// 次の解析へ状態遷移
+				this.state = 'expr_impl_term_lp_id';
+			}
 		} else if (is_typename) {
 			// typename tokenが出現
 			// typename解析状態へ合流
@@ -1434,7 +1465,9 @@ export class parser {
 		this.skip_whitespace();
 
 		// ) を登録
-		this.set_current_context('@undecided');
+		//this.set_current_context('@undecided');
+		// 解析ツリーに出現トークンを登録
+		this.push_parse_node('expression');
 
 		// 空白をスキップ
 		this.skip_whitespace();
@@ -3845,13 +3878,20 @@ export class parser {
 
 			default:
 				// その他token
-				if (this.is_declaration_token()) {
+				// statementのcontextでdeclarationは出現しない
+				/*if (this.is_declaration_token()) {
 					// declaration開始tokenであれば解析開始
-					this.switch_new_context('declaration', 'declaration', 'func-def_decl-spec_decl');
+					this.switch_new_context('declaration', 'declaration', 'statement');
+				} else*/ if (this.is_expression_token()) {
+					// expression開始tokenであれば解析開始
+					this.switch_new_context('expression', 'expr', 'statement_expr');
 				} else {
 					// その他は構文エラー
-					// エラー処理に任せる
-					this.state = 'func-def_decl-spec_decl@err';
+					// 解析ツリーに出現トークンを登録
+					this.push_error_node('statement', 'unexpected-token');
+					// contextにエラーを設定
+					this.set_current_context_error('unexpected-token');
+					finish = true;
 				}
 				break;
 		}
@@ -4656,7 +4696,7 @@ export class parser {
 		let id: token_id;
 		let id_stack: token_id[] = [];
 		let is_decl: boolean;
-		let is_expr: boolean;
+		let is_state: boolean;
 
 		let result: parse_context = '@undecided';
 
@@ -4668,15 +4708,26 @@ export class parser {
 		[id, pos] = this.get_token_id_if_not_whitespace(pos);
 		// 先頭token判定
 		is_decl = this.is_declaration_token(id);
-		is_expr = this.is_statement(id);
-		if (is_decl && is_expr) {
+		is_state = this.is_statement(id);
+		if (is_decl && is_state) {
 			// token重複
 			// identifierのみ重複のはず
-			// tokenを先読みして判定する
+			if (this.is_typedef_token()) {
+				// typedef-nameであればdeclarationで確定
+				return ['declaration', pos];
+			} else if (this.is_ident_var_token()) {
+				// 変数名であればstatementで確定
+				return ['statement', pos];
+			} else if (this.is_ident_func_token()) {
+				// 関数名であればstatementで確定
+				return ['statement', pos];
+			} else {
+				// 該当なしであれば、tokenを先読みして判定する
+			}
 		} else if (is_decl) {
 			// declarationで確定
 			return ['declaration',pos];
-		} else if (is_expr) {
+		} else if (is_state) {
 			// expressionで確定
 			return ['statement',pos];
 		} else {
@@ -4735,7 +4786,7 @@ export class parser {
 
 			// 重複
 			case 'semicolon':
-				// ; でcontext終了
+				// id ; でcontext終了
 				// 判断がつかないのでdeclarationに丸める
 				return ['declaration', pos];
 				break;
@@ -4967,13 +5018,34 @@ export class parser {
 	}
 
 	/**
+	 * 現在出現しているtokenが変数名かどうか判定する
+	 */
+	private is_ident_var_token(token?:string): boolean {
+		if (!token) token = this.get_token_str();
+		for (let info of this.ident_var_tbl) {
+			if (info.token == token) return true;
+		}
+		return false;
+	}
+	/**
+	 * 現在出現しているtokenが関数名かどうか判定する
+	 */
+	private is_ident_func_token(token?: string): boolean {
+		if (!token) token = this.get_token_str();
+		for (let info of this.ident_func_tbl) {
+			if (info.token == token) return true;
+		}
+		return false;
+	}
+	/**
 	 * 現在出現しているtokenがtypedef-nameかどうか判定する
 	 */
-	private is_typedef_token(): boolean {
-		let result: boolean;
-		let token: string = this.get_token_str();
-		result = (this.typedef_tbl.indexOf(token) != -1);
-		return result;
+	private is_typedef_token(token?: string): boolean {
+		if (!token) token = this.get_token_str();
+		for (let info of this.typedef_tbl) {
+			if (info.token == token) return true;
+		}
+		return false;
 	}
 
 	/**
@@ -5091,6 +5163,8 @@ export class parser {
 		let decl_node: parse_tree_node | null = null;
 		let has_decl_spec: boolean = false;
 		let has_decl: boolean = false;
+		let has_decl_var: boolean = false;
+		let has_decl_func: boolean = false;
 		let has_err: boolean = false;
 		tgt_node.child.forEach(node => {
 			if (node.err_info != 'null') has_err = true;
@@ -5102,13 +5176,29 @@ export class parser {
 				decl_node = node;
 				has_decl = true;
 			}
+			if (node.context == 'declarator_var') {
+				decl_node = node;
+				has_decl_var = true;
+			}
+			if (node.context == 'declarator_func') {
+				decl_node = node;
+				has_decl_func = true;
+			}
 		});
 
 		if (!has_err) {
-			if (has_decl_spec && has_decl) {
+			if (has_decl_spec) {
 				// 現在のcontextがtypedefであれば処理を実施
-				if (decl_spec_node != null && decl_spec_node!.is_typedef) {
+				if (has_decl && decl_spec_node != null && decl_spec_node!.is_typedef) {
 					this.eval_typedef(decl_spec_node!, decl_node!);
+				}
+				// 変数宣言であれば処理実施
+				if (has_decl_var) {
+					this.eval_ident_var(decl_spec_node!, decl_node!);
+				}
+				// 変数宣言であれば処理実施
+				if (has_decl_func) {
+					this.eval_ident_func(decl_spec_node!, decl_node!);
 				}
 			}
 		}
@@ -5120,20 +5210,159 @@ export class parser {
 	 * 型情報の登録を行う
 	 */
 	private eval_typedef(decl_spec_node: parse_tree_node, decl_node: parse_tree_node) {
-		decl_node.child.forEach(node => {
-			if (node.lex?.id == 'identifier') this.push_typedef(node.lex.token);
-		});
-		const tgt_node = decl_node.child.find( node => (node.lex) && (node.lex.id == 'identifier') );
-		if (tgt_node && tgt_node.lex) {
-			this.push_typedef(tgt_node.lex.token);
+		let id_info: ident_info;
+		id_info = this.get_empty_ident_info();
+		id_info.is_typedef = true;
+		// 変数情報を取得
+		this.eval_typedef_search_spec(id_info, decl_spec_node);
+		// 変数宣言は複数存在するので後に実施、見つけたものは順次登録
+		this.eval_typedef_search_name(id_info, decl_node);
+	}
+	private eval_typedef_search_spec(id_info: ident_info, decl_spec_node: parse_tree_node) {
+		// declaration-specifiers から型情報を探す
+		// T.B.D.
+	}
+	private eval_typedef_search_name(id_info: ident_info, decl_node: parse_tree_node) {
+		// declaratorにはidentifierは複数出現する。
+		// それらは別々の変数宣言となる。
+		// identifierを検出したら名前を登録
+		if (decl_node.lex && decl_node.lex.id == 'identifier') {
+			let new_id: ident_info;
+			new_id = this.get_clone_ident_info(id_info);
+			new_id.token = decl_node.lex.token;
+			// 変数名を登録
+			this.push_typedef(new_id);
+		}
+		// childが存在するなら再帰的にチェック
+		// 名前となるidentifierは,で区切られて出現する
+		let push_ok: boolean = true;
+		for (let node of decl_node.child) {
+			if (push_ok) {
+				this.eval_ident_var_search_name(id_info, node);
+				push_ok = false;
+			} else {
+				if (node.lex && node.lex.id == 'comma') push_ok = true;
+			}
+		}
+	}
+	/**
+	 * declarationが変数宣言のcontextであったとき、
+	 * 変数名情報の登録を行う
+	 */
+	private eval_ident_var(decl_spec_node: parse_tree_node, decl_node: parse_tree_node) {
+		let id_info: ident_info;
+		id_info = this.get_empty_ident_info();
+		id_info.is_ident_var = true;
+		// 変数情報を取得
+		this.eval_ident_var_search_spec(id_info, decl_spec_node);
+		// 変数宣言は複数存在するので後に実施、見つけたものは順次登録
+		this.eval_ident_var_search_name(id_info, decl_node);
+	}
+	private eval_ident_var_search_spec(id_info: ident_info, decl_spec_node: parse_tree_node) {
+		// declaration-specifiers から型情報を探す
+		// T.B.D.
+	}
+	private eval_ident_var_search_name(id_info: ident_info, decl_node: parse_tree_node) {
+		// declaratorにはidentifierは複数出現する。
+		// それらは別々の変数宣言となる。
+		// identifierを検出したら名前を登録
+		if (decl_node.lex && decl_node.lex.id == 'identifier') {
+			let new_id: ident_info;
+			new_id = this.get_clone_ident_info(id_info);
+			new_id.token = decl_node.lex.token;
+			// 変数名を登録
+			this.push_ident_var(new_id);
+		}
+		// childが存在するなら再帰的にチェック
+		// 名前となるidentifierは,で区切られて出現する
+		let push_ok: boolean = true;
+		for (let node of decl_node.child) {
+			if (push_ok) {
+				this.eval_ident_var_search_name(id_info, node);
+				push_ok = false;
+			} else {
+				if (node.lex && node.lex.id == 'comma') push_ok = true;
+			}
+		}
+	}
+	/**
+	 * declarationが関数宣言のcontextであったとき、
+	 * 変数名情報の登録を行う
+	 */
+	private eval_ident_func(decl_spec_node: parse_tree_node, decl_node: parse_tree_node) {
+		let id_info: ident_info;
+		id_info = this.get_empty_ident_info();
+		id_info.is_ident_func = true;
+		// 変数情報を取得
+		this.eval_ident_func_search_spec(id_info, decl_spec_node);
+		// 変数宣言は複数存在するので後に実施、見つけたものは順次登録
+		this.eval_ident_func_search_name(id_info, decl_node);
+	}
+	private eval_ident_func_search_spec(id_info: ident_info, decl_spec_node: parse_tree_node) {
+		// declaration-specifiers から型情報を探す
+		// T.B.D.
+	}
+	private eval_ident_func_search_name(id_info: ident_info, decl_node: parse_tree_node) {
+		// declaratorにはidentifierは複数出現する。
+		// それらは別々の変数宣言となる。
+		// identifierを検出したら名前を登録
+		if (decl_node.lex && decl_node.lex.id == 'identifier') {
+			let new_id: ident_info;
+			new_id = this.get_clone_ident_info(id_info);
+			new_id.token = decl_node.lex.token;
+			// 変数名を登録
+			this.push_ident_func(new_id);
+		}
+		// childが存在するなら再帰的にチェック
+		// 名前となるidentifierは,で区切られて出現する
+		let push_ok: boolean = true;
+		for (let node of decl_node.child) {
+			if (push_ok) {
+				this.eval_ident_var_search_name(id_info, node);
+				push_ok = false;
+			} else {
+				if (node.lex && node.lex.id == 'comma') push_ok = true;
+			}
 		}
 	}
 
 	/**
 	 * typedefとして登録
 	 */
-	private push_typedef(id: string) {
+	private push_typedef(id: ident_info) {
 		this.typedef_tbl.push(id);
+	}
+	private push_ident_var(id: ident_info) {
+		this.ident_var_tbl.push(id);
+	}
+	private push_ident_func(id: ident_info) {
+		this.ident_func_tbl.push(id);
+	}
+	private get_empty_ident_info(): ident_info {
+		return {
+			token: "",
+			type: 'null',
+			is_signed: false,
+			is_static: false,
+			is_const: false,
+			is_inline: false,
+			is_ident_var: false,
+			is_ident_func: false,
+			is_typedef: false,
+		};
+	}
+	private get_clone_ident_info(id: ident_info): ident_info {
+		return {
+			token: id.token,
+			type: id.type,
+			is_signed: id.is_signed,
+			is_static: id.is_static,
+			is_const: id.is_const,
+			is_inline: id.is_inline,
+			is_ident_var: id.is_ident_var,
+			is_ident_func: id.is_ident_func,
+			is_typedef: id.is_typedef,
+		};
 	}
 
 	/**

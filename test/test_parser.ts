@@ -27,6 +27,8 @@ function parser_tree_node_dump(tgt_node: parse_tree_node, output: { caption: str
 	let tgt_output: { caption: string, lang: string };
 	let caption: string;
 	let token: string;
+	let caption_len: number;
+	let token_len: number;
 	tgt_output = output[output.length - 1];
 
 	// 字句情報があれば
@@ -40,19 +42,26 @@ function parser_tree_node_dump(tgt_node: parse_tree_node, output: { caption: str
 				// 改行キャプション追記
 				tgt_output.caption += "[NEWLINE]";
 				// output改行
-				output.push({ caption: "//", lang: "  " });
+				output.push({ caption: "////", lang: "    " });
 				break;
 			default:
-				// 文字列を取得
+				// dump文字列作成
 				caption = "[" + tgt_node.lex.id.toString() + "]";
 				token = tgt_node.lex.token;
+				// err情報作成
+				if (tgt_node.err_info != 'null') {
+					caption += "(err)";
+				}
+				// 文字列長取得
+				caption_len = get_str_len(caption);
+				token_len = get_str_len(token);
 				// 幅合わせ
-				if (caption.length > token.length) {
-					for (let i=0; i<caption.length-token.length+1; i++) {
+				if (caption_len > token_len) {
+					for (let i = 0; i < caption_len - token_len; i++) {
 						token += " ";
 					}
 				} else {
-					for (let i = 0; i < token.length - caption.length + 1; i++) {
+					for (let i = 0; i < token_len - caption_len; i++) {
 						caption += " ";
 					}
 				}
@@ -60,6 +69,29 @@ function parser_tree_node_dump(tgt_node: parse_tree_node, output: { caption: str
 				tgt_output.caption += caption;
 				tgt_output.lang += token;
 				break;
+		}
+	} else {
+		// エラー情報のみトークンのとき
+		if (tgt_node.child.length == 0 && tgt_node.err_info != 'null') {
+			// dump文字列作成
+			caption = "(" + tgt_node.err_info.toString() + ")";
+			token = "";
+			// 文字列長取得
+			caption_len = get_str_len(caption);
+			token_len = get_str_len(token);
+			// 幅合わせ
+			if (caption_len > token_len) {
+				for (let i = 0; i < caption_len - token_len; i++) {
+					token += " ";
+				}
+			} else {
+				for (let i = 0; i < token_len - caption_len; i++) {
+					caption += " ";
+				}
+			}
+			// 設定
+			tgt_output.caption += caption;
+			tgt_output.lang += token;
 		}
 	}
 	// 子ツリーがいれば
@@ -69,6 +101,22 @@ function parser_tree_node_dump(tgt_node: parse_tree_node, output: { caption: str
 	// 
 
 	return is_eof;
+}
+function get_str_len(str:string):number {
+	let result: number=0;
+
+	for (let i=0; i<str.length; i++) {
+		switch (str[i]) {
+			case '\t':
+				result += 4;
+				break;
+			default:
+				result += 1;
+				break;
+		}
+	}
+
+	return result;
 }
 
 function parser_test(file_path: string) {

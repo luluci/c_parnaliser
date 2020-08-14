@@ -7,8 +7,8 @@ void A_2_1_Expressions(void) {
 	100;
 	"string-literal";
 	(id);
-	(100);
-	("string-literal");
+	(200);
+	("string-literal-2");
 	// (6.5.2) postfix-expression
 }
 
