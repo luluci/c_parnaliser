@@ -51,10 +51,11 @@ type parser_state =
 	| 'expr_impl_term_prim_lp_arg_expr_list'	//		-> ( arg-expr-list
 	| 'expr_impl_term_unexpr'					//	-> unary-expression
 	| 'expr_impl_term_lp'						//	-> (
-	| 'expr_impl_term_lp_id'					//		-> identifier
-	| 'expr_impl_term_lp_rp'					//		-> * )
+	| 'expr_impl_term_lp_expr'					//		-> expression
+	| 'expr_impl_term_lp_typename'				//		-> typename
 	| 'expr_impl_term_lp_rp_lb_inilist'			//			-> { initializer-list
-	| 'expr_impl_term_sizeof_lp_rp'				//	-> sizeof ( * )
+	| 'expr_impl_term_sizeof_lp'				//	-> sizeof (
+	| 'expr_impl_term_sizeof_lp_rp'				//		-> *
 	| 'arg_expr_list'							// argument-expression-list
 	| 'arg_expr_list_re'							// argument-expression-list
 	// Declarations
@@ -331,14 +332,14 @@ export class parser {
 					break;
 
 				// Expressions
-				case 'assign-expr':
-					finish = this.parse_assign_expr();
-					break;
 				case 'expr':
 					finish = this.parse_expr();
 					break;
 				case 'expr_re':
 					finish = this.parse_expr_re();
+					break;
+				case 'assign-expr':
+					finish = this.parse_assign_expr();
 					break;
 				case 'const-expr':
 					finish = this.parse_const_expr();
@@ -367,14 +368,17 @@ export class parser {
 				case 'expr_impl_term_lp':
 					finish = this.parse_expr_impl_term_lp();
 					break;
-				case 'expr_impl_term_lp_id':
-					finish = this.parse_expr_impl_term_lp_id();
+				case 'expr_impl_term_lp_expr':
+					finish = this.parse_expr_impl_term_lp_expr();
 					break;
-				case 'expr_impl_term_lp_rp':
-					finish = this.parse_expr_impl_term_lp_rp();
+				case 'expr_impl_term_lp_typename':
+					finish = this.parse_expr_impl_term_lp_typename();
 					break;
 				case 'expr_impl_term_lp_rp_lb_inilist':
 					finish = this.parse_expr_impl_term_lp_rp_lb_inilist();
+					break;
+				case 'expr_impl_term_sizeof_lp':
+					finish = this.parse_expr_impl_term_sizeof_lp();
 					break;
 				case 'expr_impl_term_sizeof_lp_rp':
 					finish = this.parse_expr_impl_term_sizeof_lp_rp();
@@ -789,6 +793,14 @@ export class parser {
 	}
 
 	/**
+	 * experssion解析全体イメージ
+	 * [ctx_sw]+
+	 *         +-(expr)----[ctx_sw]+---------------------...
+	 *         +-(assign-expr)-+   +
+	 *         +-(const-expr)---`+-+-(expr_impl)-[ctx_sw]+---------------------
+	 *                                                   +-(expr_impl)
+	 */
+	/**
 	 * expression解析
 	 * 演算子の優先順位等は考慮せず、grammarとしてexpressionを構成するtokenを取得する
 	 * 
@@ -980,7 +992,7 @@ export class parser {
 	}
 	/**
 	 * expression解析(2回目)
-	 * conditiona
+	 * conditional
 	 */
 	private parse_expr_impl_re_cond(): boolean {
 		let finish: boolean;
@@ -1052,8 +1064,7 @@ export class parser {
 				// 解析ツリーに出現トークンを登録
 				this.push_parse_node('expression');
 				// expression と type-name を判別しないといけないので別処理へ遷移
-				// @undecidedとして解析を開始
-				this.switch_new_context('@undecided', 'expr_impl_term_lp', 'expr_impl_term_lp_rp');
+				this.state = 'expr_impl_term_lp';
 				break;
 
 			// unary-expression
@@ -1083,8 +1094,7 @@ export class parser {
 				if (this.get_token_id() == 'left_paren') {
 					// ( が出現したら expression or type-name
 					// expression と type-name を判別しないといけないので別処理へ遷移
-					// @undecidedとして解析を開始
-					this.switch_new_context('@undecided', 'expr_impl_term_lp', 'expr_impl_term_sizeof_lp_rp');
+					this.state = 'expr_impl_term_sizeof_lp';
 				} else {
 					// ( が出現しなければ解析継続
 					this.state = 'expr_impl_term_unexpr';
@@ -1289,139 +1299,42 @@ export class parser {
 		this.skip_whitespace();
 
 		//出現しているtokenをチェック
-		let is_typename = this.is_typename_token();
-		let is_expression = this.is_expression_token();
-		if (is_typename && is_expression) {
-			// 両方成立しているとき
-			// 重複はidentifierのみ
-			if (this.is_typedef_token()) {
-				// typename解析状態へ合流
-				this.set_current_context('type-name');
-			} else if (this.is_ident_var_token()) {
-				// expression解析状態へ合流
-				this.set_current_context('expression');
-			} else if (this.is_ident_func_token()) {
-				// expression解析状態へ合流
-				this.set_current_context('expression');
-			} else {
-				this.push_parse_node('@undecided');
-				// 次の解析へ状態遷移
-				this.state = 'expr_impl_term_lp_id';
-			}
-		} else if (is_typename) {
-			// typename tokenが出現
-			// typename解析状態へ合流
-			this.set_current_context('type-name');
-			this.state = 'type-name';
-		} else if (is_expression) {
-			// expression tokenが出現
-			// expression解析状態へ合流
-			this.set_current_context('expression');
-			this.state = 'expr';
-		} else {
-			// 両方不成立
-			switch (this.get_token_id()) {
-				case 'right_paren':
-					// ) が出現したらカッコ内が空だったら構文エラーで解析終了
-					this.push_error_node('@undecided', 'not_found_any_token');
-					finish = true;
-					break;
-
-				case 'EOF':
-					// EOF が出現したら構文エラーで終了
-					this.set_current_context_error('EOF_in_parse');
-					this.push_error_node('expression', 'EOF_in_parse');
-					this.state = 'EOF';
-					finish = true;
-					break;
-
-				default:
-					// その他tokenは構文エラー
-					// 先読みしてエラー解析するか？
-					finish = true;
-					break;
-			}
-		}
-
-		return finish;
-	}
-	/**
-	 * expression解析
-	 * ( identifier まで検出した後から解析実施
-	 * expression or type-name につながる
-	 */
-	private parse_expr_impl_term_lp_id(): boolean {
-		let finish: boolean;
-		finish = false;
-
-		// 空白を事前にスキップ
-		this.skip_whitespace();
-
-		// ここで未確定でも context を決定する
-		type jdg = 'expr' | 'typename' | 'finish' | 'err';
-		let ctx_jdg: jdg;
-		// 出現しているtokenをチェック
 		switch (this.get_token_id()) {
 			case 'right_paren':
-				// ) が出現したらidentifierが未確定で終了
-				// その先のcontext解析は復帰先で実施
-				ctx_jdg = 'finish';
-				break;
-
-			// 重複
-			case 'left_paren':
-			case 'asterisk':
-				ctx_jdg = 'expr';
-				break;
-
-			// type-name
-			case 'left_bracket':
-				ctx_jdg = 'typename';
+				// ) が出現したらカッコ内が空だったら構文エラーで解析終了
+				this.set_current_context_error('not_found_any_token');
+				this.push_parse_node('expression', 'not_found_any_token');
+				finish = true;
 				break;
 
 			case 'EOF':
 				// EOF が出現したら構文エラーで終了
 				this.set_current_context_error('EOF_in_parse');
-				this.push_error_node('postfix-expression', 'EOF_in_parse');
+				this.push_error_node('expression', 'EOF_in_parse');
 				this.state = 'EOF';
-				ctx_jdg = 'err';
+				finish = true;
 				break;
 
 			default:
-				// その他token出現時
-				// 重複はチェック済み
-				if (this.is_expression_token()) {
-					// expression tokenが出現
-					ctx_jdg = 'expr';
-				} else {
-					// その他tokenは構文エラー
-					this.set_current_context_error('unexpected-token');
-					ctx_jdg = 'err';
+				let ctx: parse_context;
+				let pos: number;
+				[ctx, pos] = this.lookahead_jdg_expr_typename();
+				switch (ctx) {
+					case 'type-name':
+						// 解析開始
+						this.switch_new_context('type-name', 'type-name', 'expr_impl_term_lp_typename');
+						break;
+					case 'expression':
+						// 解析開始
+						this.switch_new_context('expression', 'expr', 'expr_impl_term_lp_expr');
+						break;
+					default:
+						// その他tokenは構文エラー
+						this.set_current_context_error('unexpected-token');
+						this.push_error_node('expression', 'unexpected-token');
+						finish = true;
+						break;
 				}
-				break;
-		}
-
-		switch (ctx_jdg) {
-			case 'expr':
-				// expression解析状態へ合流
-				this.set_current_context('expression');
-				this.expr_enable_assign = true;
-				this.state = 'expr_impl_term_prim';
-				break;
-
-			case 'typename':
-				// このcontextではtypename終了しているので解析終了
-				this.set_current_context('type-name');
-				finish = true;
-				break;
-
-			case 'finish':
-				finish = true;
-				break;
-
-			case 'err':
-			default:
-				finish = true;
 				break;
 		}
 
@@ -1429,104 +1342,72 @@ export class parser {
 	}
 	/**
 	 * expression解析
-	 * ( * ) まで検出した後から解析実施
+	 * ( expression まで検出した後から解析実施
 	 */
-	private parse_expr_impl_term_lp_rp(): boolean {
+	private parse_expr_impl_term_lp_expr(): boolean {
 		let finish: boolean;
 		finish = false;
 
 		// 空白をスキップ
 		this.skip_whitespace();
 
-		// ) を登録
-		//this.set_current_context('@undecided');
-		// 解析ツリーに出現トークンを登録
-		this.push_parse_node('expression');
+		//出現しているtokenをチェック
+		switch (this.get_token_id()) {
+			case 'right_paren':
+				// ) を登録
+				this.push_parse_node('expression');
+				break;
+			default:
+				// その他tokenは構文エラー
+				this.set_current_context_error('not_found_right_paren');
+				this.push_error_node('expression', 'not_found_right_paren');
+				break;
+		}
+
+		// 次の解析へ遷移
+		this.state = 'expr_impl_term_prim';
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * ( type-name まで検出した後から解析実施
+	 */
+	private parse_expr_impl_term_lp_typename(): boolean {
+		let finish: boolean;
+		finish = false;
 
 		// 空白をスキップ
 		this.skip_whitespace();
 
-		// 未確定だったidentifierの解析結果に応じて処理を実施
-		type jdg = 'primary' | 'postfix' | 'cast' | 'err';
-		let ctx_jdg: jdg = 'err';
-		let {valid, ctx} = this.get_prev_ctx(2);
-		if (valid) {
-			switch (ctx) {
-				case '@undecided':
-					// ( identifier * ) の解析が未確定で終了した場合、
-					// ここで最終判定を実施する
-					switch (this.get_token_id()) {
-						case 'left_brace':
-							// { が出現したら postfix-expression のcontextだった
-							ctx_jdg = 'postfix';
-							break;
-						default:
-							// その他tokenはprimary-expressionだったとみなす
-							ctx_jdg = 'primary';
-							break;
-					}
-					break;
-
-				case 'expression':
-					// primary-expressionだった
-					ctx_jdg = 'primary';
-					break;
-
-				case 'type-name':
-					switch (this.get_token_id()) {
-						case 'left_brace':
-							// { が出現したら postfix-expression のcontextだった
-							ctx_jdg = 'postfix';
-							break;
-						default:
-							// その他tokenはcast-expressionだったとみなす
-							ctx_jdg = 'cast';
-							break;
-					}
-					break;
-
-				default:
-					// その他はロジックエラー
-					ctx_jdg = 'err';
-					break;
-			}
-		} else {
-			// contextを取得できないのは構文エラー
+		//出現しているtokenをチェック
+		switch (this.get_token_id()) {
+			case 'right_paren':
+				// ) を登録
+				this.push_parse_node('expression');
+				break;
+			default:
+				// その他tokenは構文エラー
+				this.set_current_context_error('not_found_right_paren');
+				this.push_error_node('expression', 'not_found_right_paren');
+				break;
 		}
 
-		switch (ctx_jdg) {
-			case 'primary':
-				this.set_prev_node_context(3, 'primary-expression');
-				this.set_prev_node_context(2, 'expression');
-				this.set_prev_node_context(1, 'primary-expression');
-				// 次の解析へ遷移
-				this.state = 'expr_impl_term_prim';
-				break;
+		// 空白をスキップ
+		this.skip_whitespace();
 
-			case 'postfix':
-				this.set_prev_node_context(3, 'postfix-expression');
-				this.set_prev_node_context(2, 'type-name');
-				this.set_prev_node_context(1, 'postfix-expression');
+		switch (this.get_token_id()) {
+			case 'left_brace':
+				// { が出現したら postfix-expression のcontextだった
 				// { を登録
-				this.set_current_context('postfix-expression');
+				this.push_parse_node('expression');
 				// initializer-list 解析へ
 				this.switch_new_context('initializer-list', 'initializer-list', 'expr_impl_term_lp_rp_lb_inilist')
 				break;
-
-			case 'cast':
-				this.set_prev_node_context(3, 'cast-expression');
-				this.set_prev_node_context(2, 'type-name');
-				this.set_prev_node_context(1, 'cast-expression');
+			default:
+				// その他tokenはcast-expressionだったとみなす
 				// 次の解析へ遷移
 				this.state = 'expr_impl_term';
-				break;
-
-			case 'err':
-			default:
-				// その他はロジックエラー
-				this.set_current_context_error('@logic_error');
-				this.push_error_node('expression', '@logic_error');
-				finish = true;
 				break;
 		}
 
@@ -1572,6 +1453,60 @@ export class parser {
 	}
 	/**
 	 * expression解析
+	 * sizeof ( まで検出した後から解析実施
+	 * expression or type-name につながる
+	 */
+	private parse_expr_impl_term_sizeof_lp(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		//出現しているtokenをチェック
+		switch (this.get_token_id()) {
+			case 'right_paren':
+				// ) が出現したらカッコ内が空だったら構文エラーで解析終了
+				this.set_current_context_error('not_found_any_token');
+				this.push_error_node('expression', 'not_found_any_token');
+				finish = true;
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				let ctx: parse_context;
+				let pos: number;
+				[ctx, pos] = this.lookahead_jdg_expr_typename();
+				switch (ctx) {
+					case 'type-name':
+						// 解析開始
+						this.switch_new_context('type-name', 'type-name', 'expr_impl_term_sizeof_lp_rp');
+						break;
+					case 'expression':
+						// 解析開始
+						this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_term_sizeof_lp_rp');
+						break;
+					default:
+						// その他tokenは構文エラー
+						this.set_current_context_error('unexpected-token');
+						this.push_error_node('expression', 'unexpected-token');
+						finish = true;
+						break;
+				}
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
 	 * sizeof ( * ) まで検出した後から解析実施
 	 */
 	private parse_expr_impl_term_sizeof_lp_rp(): boolean {
@@ -1581,65 +1516,21 @@ export class parser {
 		// 空白をスキップ
 		this.skip_whitespace();
 
-		// ) を登録
-		this.set_current_context('@undecided');
+		//出現しているtokenをチェック
+		switch (this.get_token_id()) {
+			case 'right_paren':
+				// ) を登録
+				this.push_parse_node('expression');
 
-		// 空白をスキップ
-		this.skip_whitespace();
-
-		// 未確定だったidentifierの解析結果に応じて処理を実施
-		type jdg = 'expr' | 'typename' | 'err';
-		let ctx_jdg: jdg = 'err';
-		let { valid, ctx } = this.get_prev_ctx(2);
-		if (valid) {
-			switch (ctx) {
-				case '@undecided':
-					// ( identifier * ) の解析が未確定で終了した場合、unary-expressionとみなす
-					ctx_jdg = 'expr';
-					break;
-
-				case 'expression':
-					// unary-expressionだった
-					ctx_jdg = 'expr';
-					break;
-
-				case 'type-name':
-					ctx_jdg = 'typename';
-					break;
-
-				default:
-					// その他はロジックエラー
-					ctx_jdg = 'err';
-					break;
-			}
-		} else {
-			// contextを取得できないのは構文エラー
-		}
-
-		switch (ctx_jdg) {
-			case 'expr':
-				this.set_prev_node_context(3, 'unary-expression');
-				this.set_prev_node_context(2, 'unary-expression');
-				this.set_prev_node_context(1, 'unary-expression');
-				finish = true;
 				break;
-
-			case 'typename':
-				this.set_prev_node_context(3, 'sizeof');
-				this.set_prev_node_context(2, 'type-name');
-				this.set_prev_node_context(1, 'sizeof');
-				finish = true;
-				break;
-
-			case 'err':
 			default:
-				// その他はロジックエラー
-				this.set_current_context_error('@logic_error');
-				this.push_error_node('expression', '@logic_error');
-				finish = true;
+				// その他tokenは構文エラー
+				this.set_current_context_error('not_found_right_paren');
+				this.push_error_node('expression', 'not_found_right_paren');
 				break;
 		}
 
+		finish = true;
 		return finish;
 	}
 	/**
@@ -1917,13 +1808,15 @@ export class parser {
 				this.push_error_node('declarator', 'unexpected-token');
 				// contextにエラーを設定
 				this.set_current_context_error('unexpected-token');
+				finish = true;
 				break;
 		}
 
 		// 解析完了であれば取得したgrammarを評価
-		if (finish) {
-			// typedef
-			this.eval_declaration(this.get_curr_node());
+		let node: parse_tree_node;
+		node = this.get_curr_node();
+		if (finish && node.err_info == 'null') {
+			this.eval_declaration(node);
 		}
 
 		return finish;
@@ -3217,7 +3110,7 @@ export class parser {
 	 */
 	private parse_abst_decl_lp_abst(): boolean {
 		let finish: boolean;
-		finish = true;
+		finish = false;
 
 		// 空白を事前にスキップ
 		this.skip_whitespace();
@@ -3245,7 +3138,7 @@ export class parser {
 				break;
 		}
 
-		return finish;
+		return true;
 	}
 
 	/**
@@ -3479,7 +3372,6 @@ export class parser {
 			// expression tokenであればexpression解析開始
 			this.switch_new_context('assignment-expression', 'assign-expr', 'initializer_end');
 		} else if (this.get_token_id() == 'left_brace') {
-			// { であれば 
 			// { を登録
 			this.push_parse_node('initializer');
 			// initializer-list解析開始
@@ -4145,7 +4037,7 @@ export class parser {
 			this.set_current_context_error('not_found_left_paren');
 		}
 
-		// expression解析へ以降する
+		// expression解析へ遷移する
 		this.switch_new_context('expression', 'expr', 'statement_do_state');
 
 		return finish;
@@ -4776,6 +4668,7 @@ export class parser {
 		[id, pos] = this.get_token_id_if_not_whitespace(pos);
 		switch (id) {
 			case 'semicolon':
+			case 'simple_assign_op':
 				return ['declaration', pos];
 				break;
 			case 'left_brace':
@@ -5095,6 +4988,149 @@ export class parser {
 		}
 	}
 
+	/**
+	 * expression or type-name を判定する
+	 */
+	private lookahead_jdg_expr_typename(pos: number = 0): [parse_context, number] {
+		let la_fin: boolean = false;
+		let id: token_id;
+		let id_stack: token_id[] = [];
+		let is_decl: boolean;
+
+		let result: parse_context = '@undecided';
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		// 判定：1st token
+		// 空白文字以外のtokenを取得
+		[id, pos] = this.get_token_id_if_not_whitespace(pos);
+		//出現しているtokenをチェック
+		let is_typename = this.is_typename_token(id);
+		let is_expression = this.is_expression_token(id);
+		if (is_typename && is_expression) {
+			// 両方成立しているとき
+			// 重複はidentifierのみ
+			if (this.is_typedef_token()) {
+				return ['type-name', pos];
+			} else if (this.is_ident_var_token()) {
+				return ['expression', pos];
+			} else if (this.is_ident_func_token()) {
+				return ['expression', pos];
+			} else {
+				// 次の解析
+			}
+		} else if (is_typename) {
+			// typename tokenが出現
+			return ['type-name', pos];
+		} else if (is_expression) {
+			// expression tokenが出現
+			return ['expression', pos];
+		} else {
+			// 両方不成立
+			return ['@undecided', pos];
+		}
+
+		// 判定：2nd token
+		// 空白文字以外のtokenを取得
+		[id, pos] = this.get_token_id_if_not_whitespace(pos + 1);
+		switch (id) {
+			case 'identifier':
+				// expressionではidentifierは2度出現しない
+				// typename tokenとみなす
+				return ['type-name', pos];
+				break;
+
+			case 'right_paren':
+				// ) が出現したらcontextが終了
+				// type-nameとみなす
+				// 3rd tokenが { ならtype-name確定だが、
+				// いずれにせよtype-nameになるので先読み確認は省略
+				return ['type-name', pos];
+				break;
+
+			// expression
+			case 'dot':
+			case 'arrow_op':
+			case 'increment_op':
+			case 'decrement_op':
+			case 'div_op':
+			case 'remain_op':
+			case 'plus':
+			case 'minus':
+			case 'left_shift_op':
+			case 'right_shift_op':
+			case 'lt_op':
+			case 'gt_op':
+			case 'lte_op':
+			case 'gte_op':
+			case 'equal_op':
+			case 'inequal_op':
+			case 'ampersand':
+			case 'bitwise_EXOR_op':
+			case 'bitwise_OR_op':
+			case 'logical_AND_op':
+			case 'logical_OR_op':
+			case 'conditional_op':
+			case 'simple_assign_op':
+			case 'mul_assign_op':
+			case 'div_assign_op':
+			case 'remain_assign_op':
+			case 'add_assign_op':
+			case 'sub_assign_op':
+			case 'left_shift_assign_op':
+			case 'right_shift_assign_op':
+			case 'bitwise_AND_assign_op':
+			case 'bitwise_EXOR_assign_op':
+			case 'bitwise_OR_assign_op':
+			case 'comma':
+				return ['expression', pos];
+				break;
+
+			// 重複
+			case 'left_bracket':
+			case 'left_paren':
+				// 判定：3rd token
+				// 空白文字以外のtokenを取得
+				[id, pos] = this.get_token_id_if_not_whitespace(pos + 1);
+				//出現しているtokenをチェック
+				let is_decl = this.is_declaration_token(id);
+				is_expression = this.is_expression_token(id);
+				if (is_decl && is_expression) {
+					//T.B.D.
+				} else if (is_decl) {
+					// typename tokenとみなす
+					return ['type-name', pos];
+				} else if (is_expression) {
+					// expression tokenが出現
+					return ['expression', pos];
+				} else {
+					//T.B.D.
+				}
+				// typename tokenとみなす
+				return ['type-name', pos];
+				break;
+			case 'asterisk':
+				// 判定：3rd token
+				// 空白文字以外のtokenを取得
+				[id, pos] = this.get_token_id_if_not_whitespace(pos+1);
+				//出現しているtokenをチェック
+				is_expression = this.is_expression_token(id);
+				if (is_expression) {
+					// expression tokenが出現
+					return ['expression', pos];
+				} else {
+					// typename tokenとみなす
+					return ['type-name', pos];
+				}
+				break;
+
+			default:
+				return ['@undecided', pos];
+				break;
+		}
+	}
+
 
 
 	 private skip_whitespace() {
@@ -5311,11 +5347,12 @@ export class parser {
 	/**
 	 * 現在出現しているtokenがtype-nameかどうか判定する
 	 */
-	private is_typename_token(): boolean {
+	private is_typename_token(token?: string): boolean {
 		let result: boolean;
 		result = false;
-
-		if (this.is_type_specifier_token() && this.is_type_qualifier_token()) {
+	
+		if (!token) token = this.get_token_str();
+		if (this.is_type_specifier_token(token) || this.is_type_qualifier_token(token)) {
 			result = true;
 		}
 
@@ -5325,11 +5362,12 @@ export class parser {
 	/**
 	 * 現在出現しているtokenがtype-specifierかどうか判定する
 	 */
-	private is_type_specifier_token(): boolean {
+	private is_type_specifier_token(token?: string): boolean {
 		let result: boolean;
 		result = false;
 
-		switch (this.get_token_id()) {
+		if (!token) token = this.get_token_str();
+		switch (token) {
 			case 'void':
 			case 'char':
 			case 'short':
@@ -5355,11 +5393,12 @@ export class parser {
 	/**
 	 * 現在出現しているtokenがtype-qualifierかどうか判定する
 	 */
-	private is_type_qualifier_token(): boolean {
+	private is_type_qualifier_token(token?: string): boolean {
 		let result: boolean;
 		result = false;
 
-		switch (this.get_token_id()) {
+		if (!token) token = this.get_token_str();
+		switch (token) {
 			case 'const':
 			case 'restrict':
 			case 'volatile':
