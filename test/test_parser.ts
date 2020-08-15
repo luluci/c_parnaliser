@@ -10,7 +10,7 @@ function parser_tree_dump(tree: parse_tree_node, out_fd: number) {
 	let is_eof: boolean = false;
 
 	buff = [];
-	buff.push({caption:"//", lang:"  "});
+	buff.push({caption:"////", lang:"    "});
 	is_eof = parser_tree_node_dump(tree, buff);
 
 	for (let output of buff) {
@@ -46,12 +46,13 @@ function parser_tree_node_dump(tgt_node: parse_tree_node, output: { caption: str
 				break;
 			default:
 				// dump文字列作成
-				caption = "[" + tgt_node.lex.id.toString() + "]";
+				caption = "[" + tgt_node.lex.id.toString();
 				token = tgt_node.lex.token;
 				// err情報作成
 				if (tgt_node.err_info != 'null') {
 					caption += "(err)";
 				}
+				caption += "]";
 				// 文字列長取得
 				caption_len = get_str_len(caption);
 				token_len = get_str_len(token);
@@ -74,7 +75,7 @@ function parser_tree_node_dump(tgt_node: parse_tree_node, output: { caption: str
 		// エラー情報のみトークンのとき
 		if (tgt_node.child.length == 0 && tgt_node.err_info != 'null') {
 			// dump文字列作成
-			caption = "(" + tgt_node.err_info.toString() + ")";
+			caption = "[(" + tgt_node.err_info.toString() + ")]";
 			token = "";
 			// 文字列長取得
 			caption_len = get_str_len(caption);

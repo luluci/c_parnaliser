@@ -74,19 +74,20 @@ type parser_state =
 	| 'enum-list'								// enumerator-list
 	| 'enum-list_re'							// enumerator-list(2回目以降)
 	| 'declarator'								// declarator
+	| 'declarator_lp_decl'						// 	-> ( declarator
 	| 'declarator@err'							// declarator@err
 	| 'direct-declarator'						// direct-declarator
 	| 'direct-declarator_lb'					//	-> [
 	| 'direct-declarator_lb_assign_expr'		//		-> assginment-expression
 	| 'direct-declarator_lp'					//	-> (
-	| 'direct-declarator_lp_list'				//		-> ?-list
-	| 'direct-declarator_lp_list_rp'			//			-> )
+	| 'direct-declarator_lp_list_rp'			//		-> ?-list )
 	| 'pointer'									// pointer
 	| 'parameter-type-list'						// parameter-type-list
 	| 'parameter-type-list_type'				//	-> declaration-specifiers
-	| 'parameter-type-list_type_lp_decl'		//		-> ( *
-	| 'parameter-type-list_type_lp_rp'			//			-> ( * )
+	| 'parameter-type-list_type_decl'			//		-> (abstract-)declarator
 	| 'parameter-declaration'					// parameter-declaration
+	| 'identifier-list'							// identifier-list
+	| 'identifier-list_re'						// identifier-list
 	| 'type-name'								// type-name
 	| 'type-name_sq-list_abst-decl'				// type-name/specifier-qualifier-list -> abstract-declarator
 	| 'type-name_end'							// type-name 解析完了
@@ -291,7 +292,7 @@ export class parser {
 		return (this.state != 'EOF');
 	}
 	public get parse_tree(): parse_tree_node {
-		return this.tgt_node;
+		return this.tree;
 	}
 
 	/**
@@ -398,6 +399,9 @@ export class parser {
 					// 確定するのはここまでtokenが出現した後になる
 					finish = this.parse_declaration_decl_spec_decl()
 					break;
+				case 'declaration_decl-spec_decl_init':
+					finish = this.parse_declaration_decl_spec_decl_init();
+					break;
 				case 'decl-specifiers':
 					finish = this.parse_decl_specifiers();
 					break;
@@ -434,6 +438,9 @@ export class parser {
 				case 'declarator':
 					finish = this.parse_declarator();
 					break;
+				case 'declarator_lp_decl':
+					finish = this.parse_declarator_lp_decl();
+					break;
 				case 'declarator@err':
 					finish = this.parse_declarator_err();
 					break;
@@ -449,9 +456,6 @@ export class parser {
 				case 'direct-declarator_lp':
 					finish = this.parse_direct_declarator_lp();
 					break;
-				case 'direct-declarator_lp_list':
-					finish = this.parse_direct_declarator_lp_list();
-					break;
 				case 'direct-declarator_lp_list_rp':
 					finish = this.parse_direct_declarator_lp_list_rp();
 					break;
@@ -464,11 +468,14 @@ export class parser {
 				case 'parameter-type-list_type':
 					finish = this.parse_param_type_list_type();
 					break;
-				case 'parameter-type-list_type_lp_decl':
-					finish = this.parse_param_type_list_type_lp_decl();
+				case 'parameter-type-list_type_decl':
+					finish = this.parse_param_type_list_type_decl();
 					break;
-				case 'parameter-type-list_type_lp_rp':
-					finish = this.parse_param_type_list_type_lp_rp();
+				case 'identifier-list':
+					finish = this.parse_identifier_list();
+					break;
+				case 'identifier-list_re':
+					finish = this.parse_identifier_list_re();
 					break;
 				case 'type-name':
 					finish = this.parse_typename();
@@ -741,50 +748,17 @@ export class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		// このcontextでは直前にdeclaratorが出現している前提
-		// declaratorが変数宣言だったか関数宣言だったか判定する
-		let prev_ctx: parse_context;
-		prev_ctx = 'null';
-		let { valid, node } = this.get_prev_node_if_not_whitespace();
-		//念のため正常に取得できたかチェック
-		if (valid) {
-			// 直前のtoken/contextによりcontextが確定する
-			switch (node!.context) {
-				case 'declarator_var':
-					prev_ctx = 'declarator_var';
-					break;
-				case 'declarator_func':
-					prev_ctx = 'declarator_func';
-					break;
-				case 'declarator':
-					// ( が出現した場合スタックしていくのでツリーをたどる
-					let id_node: parse_tree_node | null;
-					id_node = this.get_node_declarator_id(node!);
-					if (id_node) {
-						switch (id_node!.context) {
-							case 'declarator_var':
-								prev_ctx = 'declarator_var';
-								break;
-							case 'declarator_func':
-								prev_ctx = 'declarator_func';
-								break;
-						}
-					}
-					break;
-
-				default:
-					// その他tokenはありえない
-					break;
-			}
-		}
-		switch (prev_ctx) {
-			case 'declarator_var':
+		let ctx: parse_context;
+		let pos: number;
+		[ctx,pos] = this.lookahead_jdg_func_decl();
+		switch (ctx) {
+			case 'declaration':
 				// 変数宣言であればdeclarationのcontextになる
 				this.set_current_context('declaration');
 				// declaration解析状態へ合流
 				this.state = 'declaration_decl-spec_decl';
 				break;
-			case 'declarator_func':
+			case 'function-definition':
 				// 変数宣言であればfunction-definitionのcontextになる
 				this.set_current_context('function-definition');
 				// function-definition解析状態へ合流
@@ -1757,13 +1731,6 @@ export class parser {
 		this.is_type_appear = true;
 
 		switch (this.get_token_id()) {
-			case 'semicolon':
-				// ;によりdeclarationのcontext終了となる
-				// 解析ツリーに出現トークンを登録
-				this.push_parse_node('declaration');
-				finish = true;
-				break;
-
 			case 'EOF':
 				// EOFは意味がないが一応正常終了
 				// 解析ツリーに出現トークンを登録
@@ -1855,11 +1822,21 @@ export class parser {
 				// 解析ツリーに出現トークンを登録
 				this.push_parse_node('init-declarator');
 				// initializerの解析を実施
-				this.switch_new_context('initializer', 'initializer', 'declaration_decl-spec_decl');
+				this.switch_new_context('initializer', 'initializer', 'declaration_decl-spec_decl_init');
 				break;
 			case 'comma':
 				// , が出現したら次のdeclaratorを解析
-				this.switch_new_context('declarator', 'declarator', 'declaration_decl-spec_decl');
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('init-declarator');
+				if (this.is_declarator_token()) {
+					// declaratorの解析を実施
+					this.switch_new_context('declarator', 'declarator', 'declaration_decl-spec_decl');
+				} else {
+					// その他tokenは構文エラー
+					this.push_error_node('declarator', 'unexpected-token');
+					// contextにエラーを設定
+					this.set_current_context_error('unexpected-token');
+				}
 				break;
 			case 'semicolon':
 				// ; が出現したらdeclarator解析完了
@@ -1889,6 +1866,64 @@ export class parser {
 		if (finish) {
 			// typedef
 			this.eval_declaration( this.get_curr_node() );
+		}
+
+		return finish;
+	}
+	/**
+	 * declaration解析
+	 * declarator initilaizer まで検出した状態から解析
+	 */
+	private parse_declaration_decl_spec_decl_init(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		switch (this.get_token_id()) {
+			case 'comma':
+				// , が出現したら次のdeclaratorを解析
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('init-declarator');
+				if (this.is_declarator_token()) {
+					// declaratorの解析を実施
+					this.switch_new_context('declarator', 'declarator', 'declaration_decl-spec_decl');
+				} else {
+					// その他tokenは構文エラー
+					this.push_error_node('declarator', 'unexpected-token');
+					// contextにエラーを設定
+					this.set_current_context_error('unexpected-token');
+				}
+				break;
+			case 'semicolon':
+				// ; が出現したらdeclarator解析完了
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('declaration');
+				finish = true;
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('declarator', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// その他tokenは構文エラー
+				// declaratorが出現しなかったものとして解析継続
+				this.push_error_node('declarator', 'unexpected-token');
+				// contextにエラーを設定
+				this.set_current_context_error('unexpected-token');
+				break;
+		}
+
+		// 解析完了であれば取得したgrammarを評価
+		if (finish) {
+			// typedef
+			this.eval_declaration(this.get_curr_node());
 		}
 
 		return finish;
@@ -2450,7 +2485,7 @@ export class parser {
 				// ( が出現したらdeclaratorを入れ子で解析
 				// token登録
 				this.push_parse_node('declarator');
-				this.switch_new_context('declarator', 'declarator', 'declarator');
+				this.switch_new_context('declarator', 'declarator', 'declarator_lp_decl');
 				break;
 
 			case 'identifier':
@@ -2477,6 +2512,27 @@ export class parser {
 		}
 
 		return finish;
+	}
+	/**
+	 * declarator解析
+	 * ( declarator まで検出した状態から解析
+	 */
+	private parse_declarator_lp_decl(): boolean {
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// ) をチェック
+		if (this.get_token_id() == 'right_paren') {
+			// token登録
+			this.push_parse_node('declarator');
+		} else {
+			this.push_error_node('declarator', 'not_found_right_paren');
+		}
+
+		// direct-declarator部の解析へ遷移
+		this.state = 'direct-declarator';
+
+		return false;
 	}
 	/**
 	 * declarator解析
@@ -2667,8 +2723,25 @@ export class parser {
 				break;
 
 			case 'identifier':
-				// identifierが出現したとき、parameter-type-list か identifier-list か判別不能
-				this.switch_new_context('@undecided', 'direct-declarator_lp_list', 'direct-declarator_lp_list_rp');
+				// parameter-type-list か identifier-list かを判定
+				let ctx: parse_context;
+				let pos: number;
+				[ctx, pos] = this.lookahead_jdg_list_param_id();
+				switch (ctx) {
+					case 'parameter-type-list':
+						// parameter-type-list解析開始
+						this.switch_new_context('parameter-type-list', 'parameter-type-list', 'direct-declarator_lp_list_rp');
+						break;
+					case 'identifier-list':
+						// identifier-list解析開始
+						this.switch_new_context('identifier-list', 'identifier-list', 'direct-declarator_lp_list_rp');
+						break;
+					default:
+						// こちらのパスはありえない
+						this.push_error_node('declarator', '@logic_error');
+						finish = true;
+						break;
+				}
 				break;
 
 			case 'EOF':
@@ -2685,53 +2758,6 @@ export class parser {
 				if (this.is_declaration_token()) {
 					// declaration開始token(declaration-specifiers token)が出現したら
 					// parameter-type-list解析開始
-					this.switch_new_context('parameter-type-list', 'parameter-type-list', 'direct-declarator_lp_list_rp');
-				} else {
-					// その他tokenが出現したら構文エラー、解析終了とする
-					this.set_current_context_error('not_found_right_paren');
-					finish = true;
-				}
-				break;
-		}
-
-		return finish;
-	}
-	/**
-	 * direct-declarator解析
-	 * direct-declarator ( identifier まで検出した後から解析開始
-	 * 型定義を完全に解析しないと parameter-type-list か identifier-list か判別不能のため、
-	 * parameter-type-listの前提で解析を実施
-	 */
-	private parse_direct_declarator_lp_list(): boolean {
-		let finish: boolean;
-		finish = false;
-
-		// 空白を事前にスキップ
-		this.skip_whitespace();
-
-		switch (this.get_token_id()) {
-			case 'right_paren':
-				// ) が出現したら解析完了とする
-				// 判別不可のまま終了したら identifier-list とする
-				this.set_current_context('identifier-list');
-				finish = true;
-				break;
-
-			case 'EOF':
-				// EOF出現、構文エラーで終了
-				// 解析ツリーに出現トークンを登録
-				this.push_error_node('parameter-type-list', 'EOF_in_parse');
-				// contextにエラーを設定
-				this.set_current_context_error('EOF_in_parse');
-				this.state = 'EOF';
-				finish = true;
-				break;
-
-			default:
-				if (this.is_declaration_token()) {
-					// declaration開始tokenであればdeclaration-specifiers出現
-					// parameter-type-list として解析を開始
-					this.set_current_context('parameter-type-list');
 					this.switch_new_context('parameter-type-list', 'parameter-type-list', 'direct-declarator_lp_list_rp');
 				} else {
 					// その他tokenが出現したら構文エラー、解析終了とする
@@ -2793,8 +2819,14 @@ export class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		// parameter-declaration 解析
-		this.switch_new_context('parameter-type-list', 'decl-specifiers', 'parameter-type-list_type');
+		if (this.is_declaration_token()) {
+			// declaration開始token(=declaration-sepcifiers)なら
+			// parameter-declaration 解析
+			this.switch_new_context('parameter-type-list', 'decl-specifiers', 'parameter-type-list_type');
+		} else {
+			// その他tokenは解析終了
+			finish = true;
+		}
 
 		return finish;
 	}
@@ -2822,28 +2854,81 @@ export class parser {
 					this.push_parse_node('parameter-type-list');
 					finish = true;
 				} else {
-					// parameter-declaration 解析
-					this.switch_new_context('parameter-type-list', 'decl-specifiers', 'parameter-type-list_type');
+					if (this.is_declaration_token()) {
+						// declaration開始token(=declaration-sepcifiers)なら
+						// parameter-declaration 解析
+						this.switch_new_context('parameter-type-list', 'decl-specifiers', 'parameter-type-list_type');
+					} else {
+						this.push_error_node('parameter-type-list', 'unexpected-token');
+					}
 				}
 				break;
 
-			case 'left_paren':
+			case 'EOF':
+				// EOF出現、構文エラーで終了
+				// 解析ツリーに出現トークンを登録
+				this.push_error_node('parameter-type-list', 'EOF_in_parse');
+				// contextにエラーを設定
+				this.set_current_context_error('EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				if (this.is_declarator_token()) {
+					let ctx: parse_context;
+					let pos: number;
+					[ctx, pos] = this.lookahead_jdg_decl_abst();
+					switch (ctx) {
+						case 'declarator':
+							this.switch_new_context('parameter-type-list', 'declarator', 'parameter-type-list_type');
+							break;
+						case 'abstract-declarator':
+							this.switch_new_context('parameter-type-list', 'abstract-declarator', 'parameter-type-list_type');
+							break;
+						default:
+							// このケースはありえない
+							this.push_error_node('parameter-type-list', '@logic_error');
+							break;
+					}
+				} else {
+					// その他tokenが出現したら解析終了とする
+					finish = true;
+				}
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * parameter-type-list 解析
+	 * declaration-specifiers (abstract-)declarator まで検出した状態から解析
+	 */
+	private parse_param_type_list_type_decl(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		switch (this.get_token_id()) {
+			case 'comma':
+				// , が出現したら次のparameter-list解析
 				this.push_parse_node('parameter-type-list');
 				// 空白をスキップ
 				this.skip_whitespace();
-				// ( が出現したときは declarator か abstract-declarator が連続する
-				// 次に出現するgrammarは identifier, abstract-declarator, parameter-type-list になる。
-				// 次に出現するtokenは競合しないため、この時点で判定できる。
-				// ※暫定で解析後の遷移先は共通に。個別に対応必要であれば都度実装
-				if (this.get_token_id() == 'identifier') {
-					// identifier が出現したら declarator 解析
-					this.switch_new_context('parameter-type-list', 'declarator', 'parameter-type-list_type_lp_decl');
-				} else if (this.is_abst_decl_begin_token()) {
-					// abstract-declarator の開始token
-					this.switch_new_context('parameter-type-list', 'abstract-declarator', 'parameter-type-list_type_lp_decl');
+				// ... が続いたら可変長引数、ここでparameter-type-list終了
+				if (this.get_token_id() == 'ellipsis') {
+					this.push_parse_node('parameter-type-list');
+					finish = true;
 				} else {
-					// その他の場合は parameter-type-list として解析開始
-					this.switch_new_context('parameter-type-list', 'parameter-type-list', 'parameter-type-list_type_lp_decl');
+					if (this.is_declaration_token()) {
+						// declaration開始token(=declaration-sepcifiers)なら
+						// parameter-declaration 解析
+						this.switch_new_context('parameter-type-list', 'decl-specifiers', 'parameter-type-list_type');
+					} else {
+						this.push_error_node('parameter-type-list', 'unexpected-token');
+					}
 				}
 				break;
 
@@ -2865,11 +2950,13 @@ export class parser {
 
 		return finish;
 	}
+
+
 	/**
-	 * ( ? まで解析した後に遷移する。
-	 * ) のチェックを実施する。
+	 * identifier-list 解析
+	 * 
 	 */
-	private parse_param_type_list_type_lp_decl(): boolean {
+	private parse_identifier_list(): boolean {
 		let finish: boolean;
 		finish = false;
 
@@ -2877,79 +2964,58 @@ export class parser {
 		this.skip_whitespace();
 
 		switch (this.get_token_id()) {
-			case 'right_paren':
-				// abstract-declarator 解析完了
-				this.push_parse_node('parameter-type-list');
-				// paramater-declaration の解析まで完了
-				// parameter-list が継続するかの判定へ遷移する
-				this.state = 'parameter-type-list_type_lp_rp';
-				break;
-
-			case 'EOF':
-				// EOF出現、構文エラーで終了
-				// 解析ツリーに出現トークンを登録
-				this.push_error_node('parameter-type-list', 'EOF_in_parse');
-				// contextにエラーを設定
-				this.set_current_context_error('EOF_in_parse');
-				this.state = 'EOF';
-				finish = true;
+			case 'identifier':
+				// token登録
+				this.push_parse_node('identifier-list');
+				this.state = 'identifier-list_re';
 				break;
 
 			default:
-				// ) 以外が出現したら構文エラー
-				this.push_error_node('parameter-type-list', 'not_found_right_paren');
-				// contextにエラーを設定
-				this.set_current_context_error('not_found_right_paren');
-				// paramater-declaration の解析まで完了
-				// parameter-list が継続するかの判定へ遷移する
-				this.state = 'parameter-type-list_type_lp_rp';
+				// identifier以外が出現したら終了とする
+				finish = true;
 				break;
 		}
 
 		return finish;
 	}
-
 	/**
-	 * paramater-declaration の一連の解析完了時に遷移
-	 * parameter-list が継続するか判定する。
+	 * identifier-list 解析(2回目以降)
+	 * 
 	 */
-	private parse_param_type_list_type_lp_rp(): boolean {
+	private parse_identifier_list_re(): boolean {
 		let finish: boolean;
 		finish = false;
 
-		// 空白を事前にスキップ
+		// 空白をスキップ
 		this.skip_whitespace();
 
 		switch (this.get_token_id()) {
 			case 'comma':
-				this.push_parse_node('parameter-type-list');
+				// , が出現したら次は必ずidentifier
+				// token登録
+				this.push_parse_node('identifier-list');
 				// 空白をスキップ
 				this.skip_whitespace();
-
-				// , が出現したら、parameter-declaration か ... が続く
-				if (this.get_token_id() == 'ellipsis') {
-					// ... が続いたら解析終了
-					this.push_parse_node('parameter-type-list');
-					finish = true;
+				if (this.get_token_id() == 'identifier') {
+					// identifierが出現したら解析継続
+					// token登録
+					this.push_parse_node('identifier-list');
 				} else {
-					// その他tokenが続いたら、再度 parameter-type-list を解析
-					this.state = 'parameter-type-list';
+					// , にidentifier以外が続いたら構文エラー
+					this.push_error_node('identifier-list', 'unexpected-token');
+					finish = true;
 				}
 				break;
 
-			case 'EOF':
-				// EOF で終了
-				this.state = 'EOF';
-				finish = true;
-				break;
 			default:
-				// , 以外が出現したら解析終了
+				// identifier以外が出現したら終了とする
 				finish = true;
 				break;
 		}
 
 		return finish;
 	}
+
 
 	/**
 	 * type-nameが登場するコンテキストでコールする。
@@ -4687,8 +4753,108 @@ export class parser {
 
 
 	/**
+	 * function-definition or declaration を判定する
+	 * declaration-specifier declarator まで検出した状態から解析する
+	 * 	-> [declaration]			init-declarator-list or ; につながる
+	 * 	-> [function-definition]	declaration-list or { につながる
+	 */
+	private lookahead_jdg_func_decl(pos: number = 0): [parse_context, number] {
+		let la_fin: boolean = false;
+		let id: token_id;
+		let id_stack: token_id[] = [];
+		let is_declarator: boolean;
+		let is_declaration: boolean;
+
+		let result: parse_context = '@undecided';
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		// 先読み判定を実施
+		// 判定：1st token
+		// 空白文字以外のtokenを取得
+		[id, pos] = this.get_token_id_if_not_whitespace(pos);
+		switch (id) {
+			case 'semicolon':
+				return ['declaration', pos];
+				break;
+			case 'left_brace':
+				return ['function-definition', pos];
+				break;
+			default:
+				// その他は解析継続
+				break;
+		}
+		//開始token判定
+		is_declarator = this.is_declarator_token(id);
+		is_declaration = this.is_declaration_token(id);
+		if (is_declarator && is_declaration) {
+			// 重複は解析継続
+		} else if (is_declarator) {
+			return ['declaration', pos];
+		} else if (is_declaration) {
+			return ['function-definition', pos];
+		} else {
+			// その他は構文エラー
+			return ['@undecided', pos];
+		}
+
+		// 未確定であれば検出済みcontextから判定
+		// このcontextでは直前にdeclaratorが出現している前提
+		// declaratorが変数宣言だったか関数宣言だったか判定する
+		let prev_ctx: parse_context;
+		prev_ctx = 'null';
+		let { valid, node } = this.get_prev_node_if_not_whitespace();
+		//念のため正常に取得できたかチェック
+		if (valid) {
+			// 直前のtoken/contextによりcontextが確定する
+			switch (node!.context) {
+				case 'declarator_var':
+					prev_ctx = 'declarator_var';
+					break;
+				case 'declarator_func':
+					prev_ctx = 'declarator_func';
+					for (let child of node!.child) {
+						if (child.lex && child.lex.id == 'asterisk') prev_ctx = 'declarator_var';
+					}
+					break;
+				case 'declarator':
+					// ( が出現した場合スタックしていくのでツリーをたどる
+					let id_node: parse_tree_node | null;
+					id_node = this.get_node_declarator_id(node!);
+					if (id_node) {
+						switch (id_node!.context) {
+							case 'declarator_var':
+								prev_ctx = 'declarator_var';
+								break;
+							case 'declarator_func':
+								prev_ctx = 'declarator_func';
+								break;
+						}
+					}
+					break;
+
+				default:
+					// その他tokenはありえない
+					break;
+			}
+		}
+		switch (prev_ctx) {
+			case 'declarator_var':
+				return ['declaration', pos];
+				break;
+			case 'declarator_func':
+				return ['function-definition', pos];
+				break;
+			default:
+				// その他のcontextはありえない
+				return ['@undecided', pos];
+				break;
+		}
+	}
+	/**
 	 * context解析
-	 * statement か declaration が出現するcontextにおいて、
+	 * statement か declaration(=declaration-specifiers) が出現するcontextにおいて、
 	 * どちらが出現したかをtoken先読みで判定する。
 	 */
 	private lookahead_jdg_state_decl(pos:number = 0): [parse_context,number] {
@@ -4787,7 +4953,8 @@ export class parser {
 			// 重複
 			case 'semicolon':
 				// id ; でcontext終了
-				// 判断がつかないのでdeclarationに丸める
+				// 型省略とみなす。
+				// 型省略の宣言と判定：(int) id ;
 				return ['declaration', pos];
 				break;
 			case 'left_bracket':
@@ -4835,6 +5002,99 @@ export class parser {
 		// ここまででダメならひとまずdeclarationとみなす
 		return ['declaration', pos];
 	}
+
+	/**
+	 * context解析
+	 * parameter-type-list か identifier-list が出現するcontextにおいて、
+	 * どちらが出現したかをtoken先読みで判定する。
+	 */
+	private lookahead_jdg_list_param_id(pos: number = 0): [parse_context, number] {
+		let la_fin: boolean = false;
+		let id: token_id;
+		let id_stack: token_id[] = [];
+		let is_decl: boolean;
+
+		let result: parse_context = '@undecided';
+
+		// identifierが出現したときに判定するためにコールする前提
+		// 空白をスキップ
+		// this.skip_whitespace();
+
+		// 判定：1st token
+		// 空白文字以外のtokenを取得
+		[id, pos] = this.get_token_id_if_not_whitespace(pos);
+		// 先頭token判定
+		is_decl = this.is_declaration_token(id);
+		if (id == 'identifier') {
+			// identifierのみ重複、個別に判定
+			if (this.is_typedef_token()) {
+				// typedef-nameであればdeclarationで確定
+				return ['parameter-type-list', pos];
+			} else if (this.is_ident_var_token()) {
+				// 変数名であればidentifier-listで確定
+				return ['identifier-list', pos];
+			} else if (this.is_ident_func_token()) {
+				// 関数名であればidentifier-listで確定
+				return ['identifier-list', pos];
+			} else {
+				// 該当なしであれば、tokenを先読みして判定する
+			}
+		} else {
+			// identifierが前提なのでこちらのパスにはこない
+			this.push_error_node("parameter-type-list", '@logic_error');
+			if (is_decl) {
+				// declarationで確定
+				return ['parameter-type-list', pos];
+			} else {
+				// 規定外のtoken出現
+				return ['@undecided', pos];
+			}
+		}
+
+		// 判定：2nd token
+		// 空白文字以外のtokenを取得
+		[id, pos] = this.get_token_id_if_not_whitespace(pos + 1);
+		if (this.is_declaration_token(id)) {
+			// declarationで確定
+			return ['parameter-type-list', pos];
+		} else if (this.is_declarator_token(id)) {
+			// declarationで確定
+			return ['parameter-type-list', pos];
+		} else {
+			// declaration,declarator以外であればidentifier-listとみなす
+			return ['identifier-list', pos];
+		}
+	}
+
+	/**
+	 * declarator か abstract-declarator かを判定する
+	 * @param pos 
+	 */
+	private lookahead_jdg_decl_abst(pos: number = 0): [parse_context, number] {
+		let la_fin: boolean = false;
+		let id: token_id;
+		let id_stack: token_id[] = [];
+		let is_decl: boolean;
+
+		let result: parse_context = '@undecided';
+
+		// 判定：1st token
+		// 空白文字以外のtokenを取得
+		[id, pos] = this.get_token_id_if_not_whitespace(pos);
+		// ( は読み飛ばす
+		while (id == 'left_paren' || id == 'asterisk') {
+			[id, pos] = this.get_token_id_if_not_whitespace(pos+1);
+		}
+		switch (id) {
+			case 'identifier':
+				// identiriferが出現したらdeclarator
+				return ['declarator', pos];
+			default:
+				// その他tokenならabstract-declarator
+				return ['abstract-declarator', pos];
+		}
+	}
+
 
 
 	 private skip_whitespace() {
@@ -5222,7 +5482,12 @@ export class parser {
 		// declaration-specifiers から型情報を探す
 		// T.B.D.
 	}
-	private eval_typedef_search_name(id_info: ident_info, decl_node: parse_tree_node) {
+	private eval_typedef_search_name(id_info: ident_info, decl_node: parse_tree_node): boolean {
+		// 登録するidentifierを見つけたかどうか
+		// 主に再帰的解析で使用する
+		let find_id: boolean;
+		find_id = false;
+
 		// declaratorにはidentifierは複数出現する。
 		// それらは別々の変数宣言となる。
 		// identifierを検出したら名前を登録
@@ -5232,18 +5497,22 @@ export class parser {
 			new_id.token = decl_node.lex.token;
 			// 変数名を登録
 			this.push_typedef(new_id);
+			find_id = true;
 		}
 		// childが存在するなら再帰的にチェック
 		// 名前となるidentifierは,で区切られて出現する
 		let push_ok: boolean = true;
+		let result: boolean;
 		for (let node of decl_node.child) {
 			if (push_ok) {
-				this.eval_ident_var_search_name(id_info, node);
-				push_ok = false;
+				result = this.eval_typedef_search_name(id_info, node);
+				if (result) push_ok = false;
 			} else {
 				if (node.lex && node.lex.id == 'comma') push_ok = true;
 			}
 		}
+
+		return find_id;
 	}
 	/**
 	 * declarationが変数宣言のcontextであったとき、
@@ -5262,7 +5531,12 @@ export class parser {
 		// declaration-specifiers から型情報を探す
 		// T.B.D.
 	}
-	private eval_ident_var_search_name(id_info: ident_info, decl_node: parse_tree_node) {
+	private eval_ident_var_search_name(id_info: ident_info, decl_node: parse_tree_node): boolean {
+		// 登録するidentifierを見つけたかどうか
+		// 主に再帰的解析で使用する
+		let find_id: boolean;
+		find_id = false;
+
 		// declaratorにはidentifierは複数出現する。
 		// それらは別々の変数宣言となる。
 		// identifierを検出したら名前を登録
@@ -5272,18 +5546,22 @@ export class parser {
 			new_id.token = decl_node.lex.token;
 			// 変数名を登録
 			this.push_ident_var(new_id);
+			find_id = true;
 		}
 		// childが存在するなら再帰的にチェック
 		// 名前となるidentifierは,で区切られて出現する
 		let push_ok: boolean = true;
+		let result: boolean;
 		for (let node of decl_node.child) {
 			if (push_ok) {
-				this.eval_ident_var_search_name(id_info, node);
-				push_ok = false;
+				result = this.eval_ident_var_search_name(id_info, node);
+				if (result) push_ok = false;
 			} else {
 				if (node.lex && node.lex.id == 'comma') push_ok = true;
 			}
 		}
+
+		return find_id;
 	}
 	/**
 	 * declarationが関数宣言のcontextであったとき、
@@ -5302,7 +5580,12 @@ export class parser {
 		// declaration-specifiers から型情報を探す
 		// T.B.D.
 	}
-	private eval_ident_func_search_name(id_info: ident_info, decl_node: parse_tree_node) {
+	private eval_ident_func_search_name(id_info: ident_info, decl_node: parse_tree_node): boolean {
+		// 登録するidentifierを見つけたかどうか
+		// 主に再帰的解析で使用する
+		let find_id: boolean;
+		find_id = false;
+
 		// declaratorにはidentifierは複数出現する。
 		// それらは別々の変数宣言となる。
 		// identifierを検出したら名前を登録
@@ -5312,18 +5595,22 @@ export class parser {
 			new_id.token = decl_node.lex.token;
 			// 変数名を登録
 			this.push_ident_func(new_id);
+			find_id = true;
 		}
 		// childが存在するなら再帰的にチェック
 		// 名前となるidentifierは,で区切られて出現する
 		let push_ok: boolean = true;
+		let result: boolean;
 		for (let node of decl_node.child) {
 			if (push_ok) {
-				this.eval_ident_var_search_name(id_info, node);
-				push_ok = false;
+				result = this.eval_ident_func_search_name(id_info, node);
+				if (result) push_ok = false;
 			} else {
 				if (node.lex && node.lex.id == 'comma') push_ok = true;
 			}
 		}
+
+		return find_id;
 	}
 
 	/**

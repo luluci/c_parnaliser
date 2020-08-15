@@ -1,4 +1,7 @@
+
 int id;
+long *id_ary;
+void (*id_func)(int, short, char*, long*, signed);
 
 // A.2.1 Expressions
 void A_2_1_Expressions(void) {
@@ -10,5 +13,8 @@ void A_2_1_Expressions(void) {
 	(200);
 	("string-literal-2");
 	// (6.5.2) postfix-expression
+	id_ary[id];
+	id_func(id, 300, "str3", id_ary, 400);
+	500[id_ary];
 }
 
