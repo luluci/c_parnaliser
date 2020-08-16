@@ -3151,7 +3151,7 @@ export class tokenizer_c implements tokenizer<token_id, token_sub_id> {
 
 		if (this.is_eof) {
 			// 1文字だけなら区切り文字
-			this.id = 'logical_negation_op';
+			this.id = 'div_op';
 			this.sub_id = 'punctuator';
 			this.state = '@end';
 			result = true;
@@ -3162,7 +3162,7 @@ export class tokenizer_c implements tokenizer<token_id, token_sub_id> {
 			// 区切り文字なので規定外の文字が登場しても別tokenとする
 			switch (char) {
 				case '=':
-					this.id = 'inequal_op';
+					this.id = 'div_assign_op';
 					this.forward_pos();
 					this.sub_id = 'punctuator';
 					this.state = '@end';
@@ -3179,7 +3179,7 @@ export class tokenizer_c implements tokenizer<token_id, token_sub_id> {
 					this.state = '@COMMENT_MULTILINE';
 					break;
 				default:
-					this.id = 'logical_negation_op';
+					this.id = 'div_op';
 					this.sub_id = 'punctuator';
 					this.state = '@end';
 					result = true;

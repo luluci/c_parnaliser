@@ -38,6 +38,7 @@ type parser_state =
 	| 'logi-OR-expr'							// logical-OR-expression
 	| 'cond-expr'								// conditional-expression
 
+	| 'unary-expr'								// unary-expression
 	| 'assign-expr'								// assignment-expression
 	| 'expr'									// expression
 	| 'expr_re'									// expression
@@ -45,6 +46,8 @@ type parser_state =
 	| 'expr_impl'								// expression
 	| 'expr_impl_re'							// expression
 	| 'expr_impl_re_cond'						//	-> ? expr :
+	| 'expr_impl_lp'							// 	-> (
+	| 'expr_impl_lp_expr'						// 		-> term
 	| 'expr_impl_term'							// cast-expressionまでの単項を解析
 	| 'expr_impl_term_prim'						//	-> primary-expression
 	| 'expr_impl_term_prim_lb_expr'				//		-> [ expr
@@ -251,6 +254,11 @@ export type ident_info = {
 	is_ident_func: boolean;
 	is_typedef: boolean;
 }
+// expression解析フラグ
+type expr_info = {
+	expr_enable_assign: boolean;		// assignment-operator の受付可否
+	expr_enable_binary: boolean;		// binary-operator の受付可否
+}
 
 export class parser {
 	private lexer: lexer<tokenizer_c, token_id, token_sub_id>;
@@ -266,7 +274,9 @@ export class parser {
 	private enum_tbl: string[];					// enum定義テーブル
 	private state_stack_tbl: parser_state[];	// parser解析状態スタック：再帰処理をしないための遷移先管理テーブル
 	private is_type_appear: boolean;			// declaration-specifiersの解析内でtype-specifierが出現したかどうかのフラグ
-	private expr_enable_assign: boolean;		// expression解析フラグ：constant?
+	private expr_info: expr_info;				//
+	private expr_info_temp: expr_info;			//
+	private expr_info_stack: expr_info[];		// 
 
 	constructor(text: string, cb?: cb_type) {
 		this.lexer = new lexer<tokenizer_c, token_id, token_sub_id>(tokenizer_c, text);
@@ -280,7 +290,9 @@ export class parser {
 		this.enum_tbl = [];
 		this.state_stack_tbl = [];
 		this.is_type_appear = false;
-		this.expr_enable_assign = true;
+		this.expr_info = { expr_enable_assign: true, expr_enable_binary: true };
+		this.expr_info_temp = { expr_enable_assign: true, expr_enable_binary: true };
+		this.expr_info_stack = [];
 	}
 
 	/**
@@ -338,6 +350,9 @@ export class parser {
 				case 'expr_re':
 					finish = this.parse_expr_re();
 					break;
+				case 'unary-expr':
+					finish = this.parse_unary_expr();
+					break;
 				case 'assign-expr':
 					finish = this.parse_assign_expr();
 					break;
@@ -352,6 +367,12 @@ export class parser {
 					break;
 				case 'expr_impl_re_cond':
 					finish = this.parse_expr_impl_re_cond();
+					break;
+				case 'expr_impl_lp':
+					finish = this.parse_expr_impl_lp();
+					break;
+				case 'expr_impl_lp_expr':
+					finish = this.parse_expr_impl_lp_expr();
 					break;
 				case 'expr_impl_term':
 					finish = this.parse_expr_impl_term();
@@ -813,7 +834,8 @@ export class parser {
 		this.skip_whitespace();
 
 		// expression解析を開始
-		this.expr_enable_assign = true;
+		this.expr_info.expr_enable_assign = true;
+		this.expr_info.expr_enable_binary = true;
 		this.switch_new_context('expression', 'expr_impl', 'expr_re');
 
 		return finish;
@@ -835,7 +857,8 @@ export class parser {
 				// 解析ツリーに出現トークンを登録
 				this.push_parse_node('expression');
 				// expression解析を開始
-				this.expr_enable_assign = true;
+				this.expr_info.expr_enable_assign = true;
+				this.expr_info.expr_enable_binary = true;
 				this.switch_new_context('expression', 'expr_impl', 'expr_re');
 				break;
 
@@ -862,7 +885,8 @@ export class parser {
 		finish = false;
 
 		// expression解析を開始
-		this.expr_enable_assign = true;
+		this.expr_info.expr_enable_assign = true;
+		this.expr_info.expr_enable_binary = true;
 		// expression解析(実装)へ遷移
 		this.state = 'expr_impl';
 
@@ -878,16 +902,33 @@ export class parser {
 		finish = false;
 
 		// expression解析を開始
-		this.expr_enable_assign = false;
+		this.expr_info.expr_enable_assign = false;
+		this.expr_info.expr_enable_binary = true;
 		// expression解析(実装)へ遷移
 		this.state = 'expr_impl';
 
 		return finish;
 	}
 	/**
+	 * unary-expression解析
+	 * binary-operatorは受け付けず、単項のみ出現
+	 */
+	private parse_unary_expr(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// expression解析を開始
+		this.expr_info.expr_enable_assign = true;
+		this.expr_info.expr_enable_binary = true;
+		// expression解析(実装)へ遷移
+		this.state = 'expr_impl_term';
+
+		return finish;
+	}
+	/**
 	 * expression解析(実装)
 	 * 演算子の優先順位等は考慮せず、grammarとしてexpressionを構成するtokenを取得する
-	 * 
+	 * expression全体でカッコ()の対応をとる必要がある
 	 */
 	private parse_expr_impl(): boolean {
 		let finish: boolean;
@@ -896,8 +937,64 @@ export class parser {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 
-		// expression解析を開始
-		this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re');
+		switch (this.get_token_id()) {
+			// primary-expression
+			case 'identifier':
+			// このcontextで出現するidentifierは変数名
+			case 'octal_constant':
+			case 'hex_constant':
+			case 'decimal_constant':
+			case 'decimal_float_constant':
+			case 'hex_float_constant':
+			case 'char_constant':
+			case 'string_literal':
+				// expression解析を開始
+				this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re');
+				break;
+
+			// primary-expression
+			// postfix-expression
+			// cast-expression
+			case 'left_paren':
+				// expression と type-name を判別しないといけないので別処理へ遷移
+				this.state = 'expr_impl_lp';
+				break;
+
+			// unary-expression
+			case 'increment_op':			// ++
+			case 'decrement_op':			// --
+				// expression解析を開始
+				this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re');
+				break;
+			case 'ampersand':				// &
+			case 'asterisk':				// *
+			case 'plus':					// +
+			case 'minus':					// -
+			case 'bitwise_complement_op':	// ~
+			case 'logical_negation_op':		// !
+				// expression解析を開始
+				this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re');
+				break;
+			case 'sizeof':
+				// expression解析を開始
+				this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re');
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// その他tokenは構文エラー
+				this.set_current_context_error('unexpected-token');
+				this.push_error_node('expression', 'unexpected-token');
+				finish = true;
+				break;
+		}
 
 		return finish;
 	}
@@ -945,7 +1042,7 @@ export class parser {
 				// 解析ツリーに出現トークンを登録
 				this.push_parse_node('expression');
 				// expression解析を開始
-				this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re');
+				this.state = 'expr_impl';
 				break;
 			// conditional
 			case 'conditional_op':
@@ -953,7 +1050,7 @@ export class parser {
 				// 解析ツリーに出現トークンを登録
 				this.push_parse_node('expression');
 				// expression解析を開始
-				this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re_cond');
+				this.switch_new_context('expression', 'expr', 'expr_impl_re_cond');
 				break;
 			// assignment
 			case 'simple_assign_op':
@@ -967,11 +1064,11 @@ export class parser {
 			case 'bitwise_AND_assign_op':
 			case 'bitwise_EXOR_assign_op':
 			case 'bitwise_OR_assign_op':
-				if (this.expr_enable_assign) {
+				if (this.expr_info.expr_enable_assign) {
 					// 解析ツリーに出現トークンを登録
 					this.push_parse_node('expression');
 					// expression解析を開始
-					this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re');
+					this.state = 'expr_impl';
 				} else {
 					finish = true;
 				}
@@ -1008,7 +1105,7 @@ export class parser {
 				// 解析ツリーに出現トークンを登録
 				this.push_parse_node('expression');
 				// expression解析を開始
-				this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re');
+				this.switch_new_context('expression', 'expr_impl', 'expr_impl_re');
 				break;
 
 			case 'EOF':
@@ -1024,6 +1121,109 @@ export class parser {
 				this.set_current_context_error('not_found_colon');
 				this.push_error_node('conditional-expression', 'not_found_colon');
 				finish = true;
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * ( まで検出した後から解析実施
+	 * expression or type-name につながる
+	 */
+	private parse_expr_impl_lp(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		// 空白文字以外のtokenを先読み
+		let id: token_id;
+		let pos: number;
+		let ctx: parse_context;
+		[id, pos] = this.get_token_id_if_not_whitespace(1);
+		//出現しているtokenをチェック
+		switch (id) {
+			case 'right_paren':
+				// ) が出現したらカッコ内が空だったら構文エラーで解析終了
+				this.set_current_context_error('not_found_any_token');
+				this.push_parse_node('expression', 'not_found_any_token');
+				finish = true;
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// 1つ先のtokenから次のcontextを解析
+				[ctx, pos] = this.lookahead_jdg_expr_typename(pos);
+				switch (ctx) {
+					case 'type-name':
+						// type-nameであればカッコ含めて1つのtermとなる
+						this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_re');
+						break;
+					case 'expression':
+						// expressionであればカッコの中身をexpressionとして解析していく
+						// ( を解析ツリーに登録
+						this.push_parse_node('expression');
+						// expression解析を開始
+						this.switch_new_context('expression', 'expr', 'expr_impl_lp_expr');
+						break;
+					default:
+						// その他tokenは構文エラー
+						this.set_current_context_error('unexpected-token');
+						this.push_error_node('expression', 'unexpected-token');
+						finish = true;
+						break;
+				}
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * ( expression まで検出した後から解析実施
+	 * ) を閉じるための処置が必要
+	 */
+	private parse_expr_impl_lp_expr(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		switch (this.get_token_id()) {
+			case 'right_paren':
+				// ) が出現したら現在contextの解析終了
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('expression');
+				//finish = true;
+				// 解析継続
+				this.state = 'expr_impl_re';
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// その他tokenは構文エラー
+				this.set_current_context_error('not_found_right_paren');
+				this.push_error_node('expression', 'not_found_right_paren');
+				//finish = true;
+				// 解析継続
+				this.state = 'expr_impl_re';
 				break;
 		}
 
@@ -1277,8 +1477,8 @@ export class parser {
 
 			default:
 				// その他tokenは構文エラー
-				this.set_current_context_error('not_found_right_bracket');
-				this.push_error_node('postfix-expression', 'not_found_right_bracket');
+				this.set_current_context_error('not_found_right_paren');
+				this.push_error_node('postfix-expression', 'not_found_right_paren');
 				// 解析継続
 				this.state = 'expr_impl_term_prim';
 				break;
@@ -1364,10 +1564,7 @@ export class parser {
 				break;
 		}
 
-		// 次の解析へ遷移
-		this.state = 'expr_impl_term_prim';
-
-		return finish;
+		return true;
 	}
 	/**
 	 * expression解析
@@ -1468,7 +1665,10 @@ export class parser {
 			case 'right_paren':
 				// ) が出現したらカッコ内が空だったら構文エラーで解析終了
 				this.set_current_context_error('not_found_any_token');
-				this.push_error_node('expression', 'not_found_any_token');
+				// ( を登録
+				this.push_parse_node('expression');
+				// ) を登録
+				this.push_parse_node('expression', 'not_found_any_token');
 				finish = true;
 				break;
 
@@ -1483,15 +1683,17 @@ export class parser {
 			default:
 				let ctx: parse_context;
 				let pos: number;
-				[ctx, pos] = this.lookahead_jdg_expr_typename();
+				[ctx, pos] = this.lookahead_jdg_expr_typename(1);
 				switch (ctx) {
 					case 'type-name':
+						// ( を登録
+						this.push_parse_node('expression');
 						// 解析開始
 						this.switch_new_context('type-name', 'type-name', 'expr_impl_term_sizeof_lp_rp');
 						break;
 					case 'expression':
 						// 解析開始
-						this.switch_new_context('expression', 'expr_impl_term', 'expr_impl_term_sizeof_lp_rp');
+						this.switch_new_context('expression', 'unary-expr', 'expr_impl_term_sizeof_lp_rp');
 						break;
 					default:
 						// その他tokenは構文エラー
@@ -1521,7 +1723,6 @@ export class parser {
 			case 'right_paren':
 				// ) を登録
 				this.push_parse_node('expression');
-
 				break;
 			default:
 				// その他tokenは構文エラー
@@ -5713,6 +5914,12 @@ export class parser {
 		this.state_stack_tbl.push(return_state);
 		// 次の解析状態へ遷移
 		this.state = next_state;
+
+		// 
+		this.expr_info_stack.push({
+			expr_enable_assign: this.expr_info.expr_enable_assign,
+			expr_enable_binary: this.expr_info.expr_enable_binary
+		});
 	}
 	/**
 	 * コンテキストスイッチ前の状態に復帰する。
@@ -5728,6 +5935,8 @@ export class parser {
 			this.state = next_state;
 			// 解析ツリー復帰
 			this.pop_parse_tree();
+
+			this.expr_info = this.expr_info_stack.pop()!;
 
 			sw_exe = true;
 		}

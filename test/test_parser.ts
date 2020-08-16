@@ -145,6 +145,6 @@ function parser_test(file_path: string) {
 }
 
 //parser_test('./test/test_parser_valid_1.c');
-//parser_test('./test/test_parser_valid_2.c');
-parser_test('./test/test_parser_valid_3.c');
+parser_test('./test/test_parser_valid_2.c');
+//parser_test('./test/test_parser_valid_3.c');
 
