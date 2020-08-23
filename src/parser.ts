@@ -5,7 +5,7 @@
 //   A.2 Phrase structure grammar
 
 import lexer from '../src/lexer';
-import { tokenizer_c, token_id, token_sub_id}  from '../src/tokenizer_c';
+import { tokenizer_c, token_id, token_sub_id } from '../src/tokenizer_c';
 
 type cb_type = (id: token_id, row: number, col: number, token: string) => void;
 
@@ -52,7 +52,7 @@ type parser_state =
 	| 'expr_impl_term_prim'						//	-> primary-expression
 	| 'expr_impl_term_prim_lb_expr'				//		-> [ expr
 	| 'expr_impl_term_prim_lp_arg_expr_list'	//		-> ( arg-expr-list
-	| 'expr_impl_term_unexpr'					//	-> unary-expression
+//	| 'expr_impl_term_unexpr'					//	-> unary-expression
 	| 'expr_impl_term_lp'						//	-> (
 	| 'expr_impl_term_lp_expr'					//		-> expression
 	| 'expr_impl_term_lp_typename'				//		-> typename
@@ -206,6 +206,7 @@ type parse_error_info =
 	| 'not_found_left_paren'					// ( が出現すべきコンテキストで出現しなかった
 	| 'not_found_right_paren'					// ) が出現すべきコンテキストで出現しなかった
 	| 'not_found_right_bracket'					// ] が出現すべきコンテキストで出現しなかった
+	| 'not_found_left_brace'					// { が出現すべきコンテキストで出現しなかった
 	| 'not_found_right_brace'					// } が出現すべきコンテキストで出現しなかった
 	| 'not_found_colon'							// conditional-expressionで:が出現しなかった
 	| 'not_found_semicolon'						// ; が出現すべきコンテキストで出現しなかった
@@ -258,6 +259,7 @@ export type ident_info = {
 type expr_info = {
 	expr_enable_assign: boolean;		// assignment-operator の受付可否
 	expr_enable_binary: boolean;		// binary-operator の受付可否
+	expr_enable_cast: boolean;			// cast-expresion の受付可否
 }
 
 export class parser {
@@ -290,8 +292,8 @@ export class parser {
 		this.enum_tbl = [];
 		this.state_stack_tbl = [];
 		this.is_type_appear = false;
-		this.expr_info = { expr_enable_assign: true, expr_enable_binary: true };
-		this.expr_info_temp = { expr_enable_assign: true, expr_enable_binary: true };
+		this.expr_info = { expr_enable_assign: true, expr_enable_binary: true, expr_enable_cast: true };
+		this.expr_info_temp = { expr_enable_assign: true, expr_enable_binary: true, expr_enable_cast: true };
 		this.expr_info_stack = [];
 	}
 
@@ -775,7 +777,7 @@ export class parser {
 
 		let ctx: parse_context;
 		let pos: number;
-		[ctx,pos] = this.lookahead_jdg_func_decl();
+		[ctx, pos] = this.lookahead_jdg_func_decl();
 		switch (ctx) {
 			case 'declaration':
 				// 変数宣言であればdeclarationのcontextになる
@@ -920,6 +922,7 @@ export class parser {
 		// expression解析を開始
 		this.expr_info.expr_enable_assign = true;
 		this.expr_info.expr_enable_binary = true;
+		this.expr_info.expr_enable_cast = true;
 		// expression解析(実装)へ遷移
 		this.state = 'expr_impl_term';
 
@@ -1243,7 +1246,7 @@ export class parser {
 		switch (this.get_token_id()) {
 			// primary-expression
 			case 'identifier':
-				// このcontextで出現するidentifierは変数名
+			// このcontextで出現するidentifierは変数名
 			case 'octal_constant':
 			case 'hex_constant':
 			case 'decimal_constant':
@@ -1273,7 +1276,8 @@ export class parser {
 				// 解析ツリーに出現トークンを登録
 				this.push_parse_node('unary-expression');
 				// 解析継続
-				this.state = 'expr_impl_term_unexpr';
+				//this.state = 'expr_impl_term_unexpr';
+				this.expr_info.expr_enable_cast = false;
 				break;
 			case 'ampersand':				// &
 			case 'asterisk':				// *
@@ -1297,7 +1301,8 @@ export class parser {
 					this.state = 'expr_impl_term_sizeof_lp';
 				} else {
 					// ( が出現しなければ解析継続
-					this.state = 'expr_impl_term_unexpr';
+					//this.state = 'expr_impl_term_unexpr';
+					this.expr_info.expr_enable_cast = false;
 				}
 				break;
 
@@ -1602,9 +1607,17 @@ export class parser {
 				this.switch_new_context('initializer-list', 'initializer-list', 'expr_impl_term_lp_rp_lb_inilist')
 				break;
 			default:
-				// その他tokenはcast-expressionだったとみなす
-				// 次の解析へ遷移
-				this.state = 'expr_impl_term';
+				// cast-expressionが有効であれば遷移可能
+				// 無効であれば構文エラー
+				if (this.expr_info.expr_enable_cast) {
+					// その他tokenはcast-expressionだったとみなす
+					// 次の解析へ遷移
+					this.state = 'expr_impl_term';
+				} else {
+					// その他tokenは構文エラー
+					this.set_current_context_error('not_found_left_brace');
+					this.push_error_node('expression', 'not_found_left_brace');
+				}
 				break;
 		}
 
@@ -1957,7 +1970,7 @@ export class parser {
 		// 解析完了であれば取得したgrammarを評価
 		if (finish) {
 			// typedef
-			this.eval_declaration( this.get_curr_node() );
+			this.eval_declaration(this.get_curr_node());
 		}
 
 		return finish;
@@ -3835,7 +3848,7 @@ export class parser {
 				// token先読み、空白はスキップする
 				let t_id: token_id;
 				let pos: number;
-				[t_id,pos] = this.get_token_id_if_not_whitespace();
+				[t_id, pos] = this.get_token_id_if_not_whitespace();
 				if (t_id == 'colon') {
 					// 直後に : が出現するならlabeled-statement
 					// label登録
@@ -4951,7 +4964,7 @@ export class parser {
 	 * statement か declaration(=declaration-specifiers) が出現するcontextにおいて、
 	 * どちらが出現したかをtoken先読みで判定する。
 	 */
-	private lookahead_jdg_state_decl(pos:number = 0): [parse_context,number] {
+	private lookahead_jdg_state_decl(pos: number = 0): [parse_context, number] {
 		let la_fin: boolean = false;
 		let id: token_id;
 		let id_stack: token_id[] = [];
@@ -4986,13 +4999,13 @@ export class parser {
 			}
 		} else if (is_decl) {
 			// declarationで確定
-			return ['declaration',pos];
+			return ['declaration', pos];
 		} else if (is_state) {
 			// expressionで確定
-			return ['statement',pos];
+			return ['statement', pos];
 		} else {
 			// 規定外のtoken出現
-			return ['@undecided',pos];
+			return ['@undecided', pos];
 		}
 
 		// identifier が expression or declarator か判定を実施
@@ -5036,7 +5049,7 @@ export class parser {
 			case 'union':
 			case 'enum':
 			case 'identifier':
-				// expressionのcontextではidentifierは2回登場しない
+			// expressionのcontextではidentifierは2回登場しない
 			case 'const':
 			case 'restrict':
 			case 'volatile':
@@ -5177,7 +5190,7 @@ export class parser {
 		[id, pos] = this.get_token_id_if_not_whitespace(pos);
 		// ( は読み飛ばす
 		while (id == 'left_paren' || id == 'asterisk') {
-			[id, pos] = this.get_token_id_if_not_whitespace(pos+1);
+			[id, pos] = this.get_token_id_if_not_whitespace(pos + 1);
 		}
 		switch (id) {
 			case 'identifier':
@@ -5314,7 +5327,7 @@ export class parser {
 			case 'asterisk':
 				// 判定：3rd token
 				// 空白文字以外のtokenを取得
-				[id, pos] = this.get_token_id_if_not_whitespace(pos+1);
+				[id, pos] = this.get_token_id_if_not_whitespace(pos + 1);
 				//出現しているtokenをチェック
 				is_expression = this.is_expression_token(id);
 				if (is_expression) {
@@ -5334,11 +5347,11 @@ export class parser {
 
 
 
-	 private skip_whitespace() {
-		 while (this.is_whitespace()) {
-			 this.push_parse_node('@WHITESPACE');
-		 }
-	 }
+	private skip_whitespace() {
+		while (this.is_whitespace()) {
+			this.push_parse_node('@WHITESPACE');
+		}
+	}
 	private is_whitespace(id?: token_id): boolean {
 		let result: boolean;
 		result = false;
@@ -5356,11 +5369,11 @@ export class parser {
 		}
 
 		return result;
-	 }
+	}
 
-	 /**
-	  * 出現しているtokenがdeclarationの開始tokenか判定する
-	  */
+	/**
+	 * 出現しているtokenがdeclarationの開始tokenか判定する
+	 */
 	private is_declaration_token(id?: token_id): boolean {
 		let result: boolean;
 		result = false;
@@ -5398,10 +5411,10 @@ export class parser {
 			case 'identifier':
 				result = true;
 				break;
-		 }
+		}
 
 		return result;
-	 }
+	}
 
 	/**
 	 * 出現しているtokenがdeclaratorの開始tokenか判定する
@@ -5517,7 +5530,7 @@ export class parser {
 	/**
 	 * 現在出現しているtokenが変数名かどうか判定する
 	 */
-	private is_ident_var_token(token?:string): boolean {
+	private is_ident_var_token(token?: string): boolean {
 		if (!token) token = this.get_token_str();
 		for (let info of this.ident_var_tbl) {
 			if (info.token == token) return true;
@@ -5551,7 +5564,7 @@ export class parser {
 	private is_typename_token(token?: string): boolean {
 		let result: boolean;
 		result = false;
-	
+
 		if (!token) token = this.get_token_str();
 		if (this.is_type_specifier_token(token) || this.is_type_qualifier_token(token)) {
 			result = true;
@@ -5688,17 +5701,21 @@ export class parser {
 
 		if (!has_err) {
 			if (has_decl_spec) {
-				// 現在のcontextがtypedefであれば処理を実施
-				if (has_decl && decl_spec_node != null && decl_spec_node!.is_typedef) {
-					this.eval_typedef(decl_spec_node!, decl_node!);
-				}
-				// 変数宣言であれば処理実施
-				if (has_decl_var) {
-					this.eval_ident_var(decl_spec_node!, decl_node!);
-				}
-				// 変数宣言であれば処理実施
-				if (has_decl_func) {
-					this.eval_ident_func(decl_spec_node!, decl_node!);
+				if (decl_spec_node!.is_typedef) {
+					// typedefのcontextであればtypedef解析
+					// このときは変数宣言にはならない
+					if (has_decl || has_decl_var || has_decl_func) {
+						this.eval_typedef(decl_spec_node!, decl_node!);
+					}
+				} else {
+					// 変数宣言であれば処理実施
+					if (has_decl_var) {
+						this.eval_ident_var(decl_spec_node!, decl_node!);
+					}
+					// 変数宣言であれば処理実施
+					if (has_decl_func) {
+						this.eval_ident_func(decl_spec_node!, decl_node!);
+					}
 				}
 			}
 		}
@@ -5918,7 +5935,8 @@ export class parser {
 		// 
 		this.expr_info_stack.push({
 			expr_enable_assign: this.expr_info.expr_enable_assign,
-			expr_enable_binary: this.expr_info.expr_enable_binary
+			expr_enable_binary: this.expr_info.expr_enable_binary,
+			expr_enable_cast: this.expr_info.expr_enable_cast
 		});
 	}
 	/**
@@ -5987,9 +6005,9 @@ export class parser {
 		let new_len: number;
 		new_len = this.tgt_node.child.push(this.get_new_tree(ctx, err_info_));
 		this.tgt_node.child[new_len - 1].parent = this.tgt_node;
-		this.tgt_node = this.tgt_node.child[new_len-1];
+		this.tgt_node = this.tgt_node.child[new_len - 1];
 	}
-	private pop_parse_tree(): parse_tree_node | null  {
+	private pop_parse_tree(): parse_tree_node | null {
 		let curr_node: parse_tree_node | null;
 
 		// 復帰先チェック
@@ -6008,7 +6026,7 @@ export class parser {
 	 * tgt_nodeに字句nodeを追加する。
 	 * nodeを追加したらlexerは次tokenを取得する
 	 */
-	private push_parse_node(ctx: parse_context, err_info:parse_error_info='null') {
+	private push_parse_node(ctx: parse_context, err_info: parse_error_info = 'null') {
 		this.tgt_node.child.push(this.get_new_node(ctx, err_info));
 	}
 	/**
@@ -6028,7 +6046,7 @@ export class parser {
 	 * tokenはnodeを追加するたびにFIFOで取り出してnodeと紐づける
 	 */
 	private get_new_token(num: number = 1) {
-		for (let i=0; i<num; i++) {
+		for (let i = 0; i < num; i++) {
 			// Lexer解析実施
 			this.lexer.exec();
 			// 取得したtokenをスタックする
@@ -6062,7 +6080,7 @@ export class parser {
 			token_ = this.get_token(pos);
 			pos++;
 		} while (!pred(token_));
-		return [token_, pos-1];
+		return [token_, pos - 1];
 	}
 	/**
 	 * token stack からidxで指定したtokenのidを返す
@@ -6122,8 +6140,8 @@ export class parser {
 						break;
 					case 'left_paren':
 						// ( を検出したら階層を下る
-						if (tgt!.child.length > idx+1) {
-							tgt = tgt!.child[idx+1];
+						if (tgt!.child.length > idx + 1) {
+							tgt = tgt!.child[idx + 1];
 							idx = 0;
 						}
 						break;
@@ -6154,10 +6172,10 @@ export class parser {
 		if (this.tgt_node.child.length > prev_count) {
 			// 前回コンテキスト参照インデックスを作成
 			idx = this.tgt_node.child.length - prev_count;
-			return { valid: true, node:this.tgt_node.child[idx] };
+			return { valid: true, node: this.tgt_node.child[idx] };
 		}
 		else {
-			return { valid:false };
+			return { valid: false };
 		}
 	}
 	private get_prev_node_if(pred: (node: parse_tree_node) => boolean, prev_count: number = 1): { valid: boolean, node?: parse_tree_node } {
@@ -6199,10 +6217,10 @@ export class parser {
 	 * @param prev_count 何個前のcontextを取得するか。1=1個前
 	 */
 	private get_prev_ctx(prev_count: number = 1): { valid: boolean, ctx?: parse_context } {
-		let {valid, node} = this.get_prev_node(prev_count);
+		let { valid, node } = this.get_prev_node(prev_count);
 
 		if (valid) {
-			return {valid:true, ctx:node!.context}
+			return { valid: true, ctx: node!.context }
 		}
 		else {
 			return { valid: false };
