@@ -58,6 +58,8 @@ type parser_state =
 	| 'expr_impl_term_lp_typename'				//		-> typename
 	| 'expr_impl_term_lp_rp_lb_inilist'			//			-> { initializer-list
 	| 'expr_impl_term_sizeof_lp'				//	-> sizeof (
+	| 'expr_impl_term_sizeof_lp_typename'		//		-> typename
+	| 'expr_impl_term_sizeof_lp_typename_rp_lb_inilist'	//			-> ) { initializer-list
 	| 'expr_impl_term_sizeof_lp_rp'				//		-> *
 	| 'arg_expr_list'							// argument-expression-list
 	| 'arg_expr_list_re'							// argument-expression-list
@@ -403,6 +405,12 @@ export class parser {
 					break;
 				case 'expr_impl_term_sizeof_lp':
 					finish = this.parse_expr_impl_term_sizeof_lp();
+					break;
+				case 'expr_impl_term_sizeof_lp_typename':
+					finish = this.parse_expr_impl_term_sizeof_lp_typename();
+					break;
+				case 'expr_impl_term_sizeof_lp_typename_rp_lb_inilist':
+					finish = this.parse_expr_impl_term_sizeof_lp_typename_rp_lb_inilist();
 					break;
 				case 'expr_impl_term_sizeof_lp_rp':
 					finish = this.parse_expr_impl_term_sizeof_lp_rp();
@@ -1618,7 +1626,7 @@ export class parser {
 				// { を登録
 				this.push_parse_node('expression');
 				// initializer-list 解析へ
-				this.switch_new_context('initializer-list', 'initializer-list', 'expr_impl_term_lp_rp_lb_inilist')
+				this.switch_new_context('initializer-list', 'initializer-list', 'expr_impl_term_lp_rp_lb_inilist');
 				break;
 			default:
 				// cast-expressionが有効であれば遷移可能
@@ -1693,16 +1701,16 @@ export class parser {
 				// ) が出現したらカッコ内が空だったら構文エラーで解析終了
 				this.set_current_context_error('not_found_any_token');
 				// ( を登録
-				this.push_parse_node('expression');
+				this.push_parse_node('unary-expression');
 				// ) を登録
-				this.push_parse_node('expression', 'not_found_any_token');
+				this.push_parse_node('unary-expression', 'not_found_any_token');
 				finish = true;
 				break;
 
 			case 'EOF':
 				// EOF が出現したら構文エラーで終了
 				this.set_current_context_error('EOF_in_parse');
-				this.push_error_node('expression', 'EOF_in_parse');
+				this.push_error_node('unary-expression', 'EOF_in_parse');
 				this.state = 'EOF';
 				finish = true;
 				break;
@@ -1714,21 +1722,103 @@ export class parser {
 				switch (ctx) {
 					case 'type-name':
 						// ( を登録
-						this.push_parse_node('expression');
+						this.push_parse_node('unary-expression');
 						// 解析開始
-						this.switch_new_context('type-name', 'type-name', 'expr_impl_term_sizeof_lp_rp');
+						this.switch_new_context('type-name', 'type-name', 'expr_impl_term_sizeof_lp_typename');
 						break;
 					case 'expression':
 						// 解析開始
-						this.switch_new_context('expression', 'unary-expr', 'expr_impl_term_sizeof_lp_rp');
+						this.switch_new_context('unary-expression', 'unary-expr', 'expr_impl_term_sizeof_lp_rp');
 						break;
 					default:
 						// その他tokenは構文エラー
 						this.set_current_context_error('unexpected-token');
-						this.push_error_node('expression', 'unexpected-token');
+						this.push_error_node('unary-expression', 'unexpected-token');
 						finish = true;
 						break;
 				}
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * sizeof ( typename まで検出した後から解析実施
+	 */
+	private parse_expr_impl_term_sizeof_lp_typename(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		//出現しているtokenをチェック
+		switch (this.get_token_id()) {
+			case 'right_paren':
+				// ) を登録
+				this.push_parse_node('unary-expression');
+				break;
+			default:
+				// その他tokenは構文エラー
+				this.set_current_context_error('not_found_right_paren');
+				this.push_error_node('unary-expression', 'not_found_right_paren');
+				break;
+		}
+
+		// 空白をスキップ
+		this.skip_whitespace();
+
+		// 次のtokenをチェック
+		switch (this.get_token_id()) {
+			case 'left_brace':
+				// { であれば initializer-listが続く
+				// { を登録
+				this.push_parse_node('unary-expression');
+				// initializer-list 解析へ
+				this.switch_new_context('initializer-list', 'initializer-list', 'expr_impl_term_sizeof_lp_typename_rp_lb_inilist');
+				break;
+			default:
+				// その他tokenは解析終了
+				finish = true;
+				break;
+		}
+
+		return finish;
+	}
+	/**
+	 * expression解析
+	 * sizeof ( typename ) { initializer-list まで検出済み
+	 */
+	private parse_expr_impl_term_sizeof_lp_typename_rp_lb_inilist(): boolean {
+		let finish: boolean;
+		finish = false;
+
+		// 空白を事前にスキップ
+		this.skip_whitespace();
+
+		switch (this.get_token_id()) {
+			case 'right_brace':			// }
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('unary-expression');
+				// 解析終了
+				finish = true;
+				break;
+
+			case 'EOF':
+				// EOF が出現したら構文エラーで終了
+				this.set_current_context_error('EOF_in_parse');
+				this.push_error_node('unary-expression', 'EOF_in_parse');
+				this.state = 'EOF';
+				finish = true;
+				break;
+
+			default:
+				// その他tokenは構文エラー
+				this.set_current_context_error('not_found_right_brace');
+				this.push_error_node('unary-expression', 'not_found_right_brace');
+				// 解析終了
+				finish = true;
 				break;
 		}
 

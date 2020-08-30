@@ -1,15 +1,5 @@
 ////[NEWLINE]
     
-////[int][WHITESPACE][identifier][semicolon][NEWLINE]
-    int              id          ;          
-////[long][WHITESPACE][asterisk][identifier][semicolon][NEWLINE]
-    long              *         id_ary      ;          
-////[void][WHITESPACE][left_paren][asterisk][identifier][right_paren][left_paren][int][comma][WHITESPACE][short][comma][WHITESPACE][char][WHITESPACE][asterisk][comma][WHITESPACE][long][WHITESPACE][asterisk][comma][WHITESPACE][signed][right_paren][semicolon][NEWLINE]
-    void              (           *         id_func     )            (           int  ,                  short  ,                  char              *         ,                  long              *         ,                  signed  )            ;          
-////[void][WHITESPACE][left_paren][asterisk][identifier][right_paren][left_paren][void][right_paren][semicolon][NEWLINE]
-    void              (           *         id_func2    )            (           void  )            ;          
-////[NEWLINE]
-    
 ////[typedef][WHITESPACE][struct][WHITESPACE][left_brace][NEWLINE]
     typedef              struct              {           
 ////[WHITESPACE][int][WHITESPACE][identifier][semicolon][NEWLINE]
@@ -22,6 +12,16 @@
     user_def_type_t            user_t_1    ;          
 ////[identifier]   [WHITESPACE][asterisk][identifier][WHITESPACE][simple_assign_op][WHITESPACE][ampersand][identifier][semicolon][NEWLINE]
     user_def_type_t            *         user_t_1p               =                             &          user_t_1    ;          
+////[NEWLINE]
+    
+////[int][WHITESPACE][identifier][semicolon][NEWLINE]
+    int              id          ;          
+////[long][WHITESPACE][asterisk][identifier][semicolon][NEWLINE]
+    long              *         id_ary      ;          
+////[void][WHITESPACE][left_paren][asterisk][identifier][right_paren][left_paren][int][comma][WHITESPACE][short][comma][WHITESPACE][char][WHITESPACE][asterisk][comma][WHITESPACE][long][WHITESPACE][asterisk][comma][WHITESPACE][signed][comma][WHITESPACE][int][asterisk][right_paren][semicolon][NEWLINE]
+    void              (           *         id_func     )            (           int  ,                  short  ,                  char              *         ,                  long              *         ,                  signed  ,                  int  *         )            ;          
+////[void][WHITESPACE][left_paren][asterisk][identifier][right_paren][left_paren][void][right_paren][semicolon][NEWLINE]
+    void              (           *         id_func2    )            (           void  )            ;          
 ////[NEWLINE]
     
 ////[COMMENT]           [NEWLINE]
@@ -50,8 +50,8 @@
     	        // (6.5.2) argument-expression-list
 ////[WHITESPACE][identifier][left_bracket][identifier][right_bracket][semicolon][NEWLINE]
     	        id_ary      [             id          ]              ;          
-////[WHITESPACE][identifier][left_paren][identifier][comma][WHITESPACE][decimal_constant][comma][WHITESPACE][string_literal][comma][WHITESPACE][left_paren][left_paren][long][asterisk][right_paren][identifier][WHITESPACE][plus][WHITESPACE][decimal_constant][WHITESPACE][asterisk][WHITESPACE][decimal_constant][WHITESPACE][div_op][WHITESPACE][decimal_constant][right_paren][comma][WHITESPACE][left_paren][decimal_constant][minus][decimal_constant][right_paren][asterisk][left_paren][decimal_constant][right_paren][right_paren][semicolon][NEWLINE]
-    	        id_func     (           id          ,                  300               ,                  "str3"          ,                  (           (           long  *         )            id_ary                  +                 1                             *                     10                            /                   2                 )            ,                  (           400               -      200               )            *         (           1                 )            )            ;          
+////[WHITESPACE][identifier][left_paren][WHITESPACE][left_paren][asterisk][left_paren][ampersand][left_paren][ampersand][identifier][right_paren][left_bracket][decimal_constant][plus][decimal_constant][right_bracket][right_paren][right_paren][comma][WHITESPACE][decimal_constant][comma][WHITESPACE][string_literal][comma][WHITESPACE][left_paren][left_paren][long][WHITESPACE][asterisk][right_paren][identifier][WHITESPACE][plus][WHITESPACE][decimal_constant][WHITESPACE][asterisk][WHITESPACE][decimal_constant][WHITESPACE][div_op][WHITESPACE][decimal_constant][right_paren][comma][WHITESPACE][left_paren][decimal_constant][WHITESPACE][minus][WHITESPACE][decimal_constant][right_paren][WHITESPACE][asterisk][WHITESPACE][left_paren][decimal_constant][right_paren][comma][WHITESPACE][left_paren][ampersand][left_paren][left_paren][ampersand][identifier][right_paren][arrow_op][identifier][right_paren][plus][decimal_constant][right_paren][right_paren][semicolon][NEWLINE]
+    	        id_func     (                       (           *         (           &          (           &          id          )            [             12                +     23                ]              )            )            ,                  300               ,                  "str3"          ,                  (           (           long              *         )            id_ary                  +                 1                             *                     10                            /                   2                 )            ,                  (           400                           -                  200               )                        *                     (           1                 )            ,                  (           &          (           (           &          user_t_1    )            ->        a           )            +     1                 )            )            ;          
 ////[WHITESPACE][identifier][left_paren][right_paren][semicolon][NEWLINE]
     	        id_func2    (           )            ;          
 ////[WHITESPACE][decimal_constant][left_bracket][identifier][right_bracket][semicolon][NEWLINE]
@@ -76,6 +76,18 @@
     	        ++            user_t_1    .    a           ;          
 ////[WHITESPACE][logical_negation_op][WHITESPACE][bitwise_complement_op][minus][plus][left_paren][ampersand][left_paren][left_paren][ampersand][identifier][right_paren][arrow_op][identifier][right_paren][right_paren][left_bracket][octal_constant][right_bracket][semicolon][NEWLINE]
     	        !                                ~                      -      +     (           &          (           (           &          user_t_1    )            ->        a           )            )            [             0               ]              ;          
+////[WHITESPACE][sizeof][WHITESPACE][identifier][semicolon][NEWLINE]
+    	        sizeof              user_t_1    ;          
+////[WHITESPACE][sizeof][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        sizeof              user_t_1    .    a           ;          
+////[WHITESPACE][sizeof][WHITESPACE][left_paren][identifier]   [right_paren][left_brace][decimal_constant][comma][WHITESPACE][decimal_constant][right_brace][semicolon][NEWLINE]
+    	        sizeof              (           user_def_type_t)            {           1                 ,                  2                 }            ;          
+////[WHITESPACE][sizeof][WHITESPACE][logical_negation_op][bitwise_complement_op][minus][plus][left_paren][ampersand][left_paren][left_paren][ampersand][identifier][right_paren][arrow_op][identifier][right_paren][right_paren][left_bracket][octal_constant][right_bracket][semicolon][NEWLINE]
+    	        sizeof              !                    ~                      -      +     (           &          (           (           &          user_t_1    )            ->        a           )            )            [             0               ]              ;          
+////[WHITESPACE][sizeof][left_paren][int][right_paren][semicolon][NEWLINE]
+    	        sizeof  (           int  )            ;          
+////[WHITESPACE][sizeof][left_paren][identifier]   [right_paren][semicolon][NEWLINE]
+    	        sizeof  (           user_def_type_t)            ;          
 ////[right_brace][NEWLINE]
     }            
 ////

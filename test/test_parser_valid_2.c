@@ -1,15 +1,15 @@
 
-int id;
-long *id_ary;
-void (*id_func)(int, short, char *, long *, signed);
-void (*id_func2)(void);
-
 typedef struct {
 	int a;
 	char b;
 } user_def_type_t;
 user_def_type_t user_t_1;
 user_def_type_t *user_t_1p = &user_t_1;
+
+int id;
+long *id_ary;
+void (*id_func)(int, short, char *, long *, signed, int*);
+void (*id_func2)(void);
 
 // A.2.1 Expressions
 void A_2_1_Expressions(void)
@@ -24,7 +24,7 @@ void A_2_1_Expressions(void)
 	// (6.5.2) postfix-expression
 	// (6.5.2) argument-expression-list
 	id_ary[id];
-	id_func(id, 300, "str3", ((long*)id_ary + 1 * 10 / 2), (400-200)*(1));
+	id_func( (*(&(&id)[12+23])), 300, "str3", ((long *)id_ary + 1 * 10 / 2), (400 - 200) * (1), (&((&user_t_1)->a)+1));
 	id_func2();
 	500[id_ary];
 	user_t_1.a;
@@ -37,4 +37,10 @@ void A_2_1_Expressions(void)
 	--user_t_1.a;
 	++user_t_1.a;
 	! ~-+(&((&user_t_1)->a))[0];
+	sizeof user_t_1;
+	sizeof user_t_1.a;
+	sizeof (user_def_type_t){1, 2};
+	sizeof !~-+(&((&user_t_1)->a))[0];
+	sizeof(int);
+	sizeof(user_def_type_t);
 }
