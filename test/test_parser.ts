@@ -46,12 +46,13 @@ function parser_tree_node_dump(tgt_node: parse_tree_node, output: { caption: str
 				break;
 			default:
 				// dump文字列作成
-				caption = "[" + tgt_node.lex.id.toString();
-				token = tgt_node.lex.token;
+				caption = "[";
 				// err情報作成
 				if (tgt_node.err_info != 'null') {
 					caption += "(err)";
 				}
+				caption += tgt_node.lex.id.toString();
+				token = tgt_node.lex.token;
 				caption += "]";
 				// 文字列長取得
 				caption_len = get_str_len(caption);
@@ -75,7 +76,7 @@ function parser_tree_node_dump(tgt_node: parse_tree_node, output: { caption: str
 		// エラー情報のみトークンのとき
 		if (tgt_node.child.length == 0 && tgt_node.err_info != 'null') {
 			// dump文字列作成
-			caption = "[(" + tgt_node.err_info.toString() + ")]";
+			caption = "[(err)(" + tgt_node.err_info.toString() + ")]";
 			token = "";
 			// 文字列長取得
 			caption_len = get_str_len(caption);

@@ -12,10 +12,10 @@
     
 ////[typedef][WHITESPACE][struct][WHITESPACE][left_brace][NEWLINE]
     typedef              struct              {           
-////[WHITESPACE][int][WHITESPACE][identifier(err)][(unexpected-token)][semicolon][NEWLINE]
-    	        int              a                                    ;          
-////[WHITESPACE][char][WHITESPACE][identifier(err)][(unexpected-token)][semicolon][NEWLINE]
-    	        char              b                                    ;          
+////[WHITESPACE][int][WHITESPACE][identifier][semicolon][NEWLINE]
+    	        int              a           ;          
+////[WHITESPACE][char][WHITESPACE][identifier][semicolon][NEWLINE]
+    	        char              b           ;          
 ////[right_brace][WHITESPACE][identifier]   [semicolon][NEWLINE]
     }                        user_def_type_t;          
 ////[identifier]   [WHITESPACE][identifier][semicolon][NEWLINE]
@@ -26,8 +26,10 @@
     
 ////[COMMENT]           [NEWLINE]
     // A.2.1 Expressions
-////[void][WHITESPACE][identifier]     [left_paren][void][right_paren][WHITESPACE][left_brace][NEWLINE]
-    void              A_2_1_Expressions(           void  )                        {           
+////[void][WHITESPACE][identifier]     [left_paren][void][right_paren][NEWLINE]
+    void              A_2_1_Expressions(           void  )            
+////[left_brace][NEWLINE]
+    {           
 ////[WHITESPACE][COMMENT]                    [NEWLINE]
     	        // (6.5.1) primary-expression
 ////[WHITESPACE][identifier][semicolon][NEWLINE]
@@ -72,6 +74,8 @@
     	        --            user_t_1    .    a           ;          
 ////[WHITESPACE][increment_op][identifier][dot][identifier][semicolon][NEWLINE]
     	        ++            user_t_1    .    a           ;          
+////[WHITESPACE][logical_negation_op][WHITESPACE][bitwise_complement_op][minus][plus][left_paren][ampersand][left_paren][left_paren][ampersand][identifier][right_paren][arrow_op][identifier][right_paren][right_paren][left_bracket][octal_constant][right_bracket][semicolon][NEWLINE]
+    	        !                                ~                      -      +     (           &          (           (           &          user_t_1    )            ->        a           )            )            [             0               ]              ;          
 ////[right_brace][NEWLINE]
     }            
 ////

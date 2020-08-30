@@ -12,7 +12,8 @@ user_def_type_t user_t_1;
 user_def_type_t *user_t_1p = &user_t_1;
 
 // A.2.1 Expressions
-void A_2_1_Expressions(void) {
+void A_2_1_Expressions(void)
+{
 	// (6.5.1) primary-expression
 	id;
 	100;
@@ -35,4 +36,5 @@ void A_2_1_Expressions(void) {
 	// (6.5.3) unary-expression
 	--user_t_1.a;
 	++user_t_1.a;
+	! ~-+(&((&user_t_1)->a))[0];
 }
