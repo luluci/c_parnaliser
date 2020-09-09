@@ -7,7 +7,7 @@
     "test": "test"
   },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {},
   "devDependencies": {
     "@types/node": "^14.0.14"
