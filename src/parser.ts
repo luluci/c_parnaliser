@@ -264,24 +264,33 @@ type expr_info = {
 	expr_enable_binary: boolean;		// binary-operator の受付可否
 	expr_enable_cast: boolean;			// cast-expresion の受付可否
 }
+// type-specifier解析情報
+type type_specifier_info = {
+	sign_def?: token_id;
+	spec_def?: token_id;
+	struct_def?: boolean;
+	union_def?: boolean;
+	enum_def?: boolean;
+	id_def?: string;
+}
 
 export class parser {
 	private lexer: lexer<tokenizer_c, token_id, token_sub_id>;
 	private parse_cb?: cb_type;
 	private state: parser_state;
 	// parser解析ツリーもどき
-	private tree: parse_tree_node;				// 解析ツリーもどきroot
-	private token_stack: lex_info[];			// LookAheda用のLexerTokenスタック
-	private tgt_node: parse_tree_node;			// 現コンテキストの解析ツリーもどきへの参照
-	private ident_var_tbl: ident_info[];		// 変数名テーブル:declaratorにより宣言される
-	private ident_func_tbl: ident_info[];		// 関数名テーブル:declaratorにより宣言される
-	private typedef_tbl: ident_info[];			// ユーザ定義型(typedef)テーブル, struct/unionはtypedefしなければidentifier単独で出現しないため、ここには登録しない
-	private enum_tbl: string[];					// enum定義テーブル
-	private state_stack_tbl: parser_state[];	// parser解析状態スタック：再帰処理をしないための遷移先管理テーブル
-	private is_type_appear: boolean;			// declaration-specifiersの解析内でtype-specifierが出現したかどうかのフラグ
-	private expr_info: expr_info;				//
-	private expr_info_temp: expr_info;			//
-	private expr_info_stack: expr_info[];		// 
+	private tree: parse_tree_node;					// 解析ツリーもどきroot
+	private token_stack: lex_info[];				// LookAheda用のLexerTokenスタック
+	private tgt_node: parse_tree_node;				// 現コンテキストの解析ツリーもどきへの参照
+	private ident_var_tbl: ident_info[];			// 変数名テーブル:declaratorにより宣言される
+	private ident_func_tbl: ident_info[];			// 関数名テーブル:declaratorにより宣言される
+	private typedef_tbl: ident_info[];				// ユーザ定義型(typedef)テーブル, struct/unionはtypedefしなければidentifier単独で出現しないため、ここには登録しない
+	private enum_tbl: string[];						// enum定義テーブル
+	private state_stack_tbl: parser_state[];		// parser解析状態スタック：再帰処理をしないための遷移先管理テーブル
+	private type_spec_info: type_specifier_info;	// declaration-specifiersの解析内でtype-specifierとして出現した情報の管理
+	private expr_info: expr_info;					//
+	private expr_info_temp: expr_info;				//
+	private expr_info_stack: expr_info[];			// 
 
 	constructor(text: string, cb?: cb_type) {
 		this.lexer = new lexer<tokenizer_c, token_id, token_sub_id>(tokenizer_c, text);
@@ -294,7 +303,7 @@ export class parser {
 		this.typedef_tbl = [];
 		this.enum_tbl = [];
 		this.state_stack_tbl = [];
-		this.is_type_appear = false;
+		this.type_spec_info = {};
 		this.expr_info = { expr_enable_assign: true, expr_enable_binary: true, expr_enable_cast: true };
 		this.expr_info_temp = { expr_enable_assign: true, expr_enable_binary: true, expr_enable_cast: true };
 		this.expr_info_stack = [];
@@ -1937,7 +1946,7 @@ export class parser {
 		this.skip_whitespace();
 
 		// type-specifierの出現有無を初期化
-		this.is_type_appear = true;
+		this.init_type_spec_info();
 
 		switch (this.get_token_id()) {
 			case 'EOF':
@@ -2151,7 +2160,7 @@ export class parser {
 		this.skip_whitespace();
 
 		// type-specifierの出現有無を初期化
-		this.is_type_appear = false;
+		this.init_type_spec_info();
 
 		switch (this.get_token_id()) {
 			// storage-class-specifier
@@ -2175,6 +2184,15 @@ export class parser {
 				break;
 
 			// type-specifier
+			case 'signed':
+			case 'unsigned':
+				// type-specifier-infoを更新
+				this.type_spec_info.sign_def = this.get_token_id();
+				// 解析ツリーに出現トークンを登録
+				this.push_parse_node('declaration-specifier');
+				// 次状態へ遷移
+				this.state = 'decl-specifiers_re';
+				break;
 			case 'void':
 			case 'char':
 			case 'short':
@@ -2182,29 +2200,32 @@ export class parser {
 			case 'long':
 			case 'float':
 			case 'double':
-			case 'signed':
-			case 'unsigned':
 			case '_Bool':
 			case '_Complex':
+				// type-specifier-infoを更新
+				this.type_spec_info.spec_def = this.get_token_id();
 				// 解析ツリーに出現トークンを登録
 				this.push_parse_node('declaration-specifier');
-				// type-specifierが出現
-				this.is_type_appear = true;
 				// 次状態へ遷移
 				this.state = 'decl-specifiers_re';
 				break;
 			case 'struct':
-			case 'union':
+				// type-specifier-infoを更新
+				this.type_spec_info.struct_def = true;
 				// struct or union であれば、struct-or-union-specifierの解析開始
 				this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'decl-specifiers_re');
-				// type-specifierが出現
-				this.is_type_appear = true;
+				break;
+			case 'union':
+				// type-specifier-infoを更新
+				this.type_spec_info.union_def = true;
+				// struct or union であれば、struct-or-union-specifierの解析開始
+				this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'decl-specifiers_re');
 				break;
 			case 'enum':
+				// type-specifier-infoを更新
+				this.type_spec_info.enum_def = true;
 				// enumであれば、enum-specifierの解析開始
 				this.switch_new_context('enum-specifier', 'enum-spec', 'decl-specifiers_re');
-				// type-specifierが出現
-				this.is_type_appear = true;
 				break;
 
 			case 'identifier':
@@ -2218,8 +2239,8 @@ export class parser {
 					// 解析ツリーに出現トークンを登録
 					this.push_parse_node('declaration-specifier', 'unknown_type');
 				}
-				// type-specifierが出現
-				this.is_type_appear = true;
+				// type-specifier-infoを更新
+				this.type_spec_info.id_def = this.get_token_str();
 				// 次状態へ遷移
 				this.state = 'decl-specifiers_re';
 				break;
@@ -2286,21 +2307,10 @@ export class parser {
 				break;
 
 			// type-specifier
-			case 'void':
-			case 'char':
-			case 'short':
-			case 'int':
-			case 'long':
-			case 'float':
-			case 'double':
 			case 'signed':
 			case 'unsigned':
-			case '_Bool':
-			case '_Complex':
-			case '__far':
-			case '__near':
 				// declaration-specifiers の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
 					// 型出現済みであれば、2回以上出現したので構文エラー
 					// 解析ツリーに出現トークンを登録
 					this.push_parse_node('declaration-specifier', 'duplicate_type_specify');
@@ -2308,42 +2318,78 @@ export class parser {
 					// 未出現であれば問題なし
 					// 解析ツリーに出現トークンを登録
 					this.push_parse_node('declaration-specifier');
+					// type-specifier-infoを更新
+					this.type_spec_info.sign_def = this.get_token_id();
 				}
-				// type-specifierが出現
-				this.is_type_appear = true;
+				break;
+			case 'void':
+			case 'char':
+			case 'short':
+			case 'int':
+			case 'long':
+			case 'float':
+			case 'double':
+			case '_Bool':
+			case '_Complex':
+			case '__far':
+			case '__near':
+				// declaration-specifiers の一連の解析内で型が出現済みか判定
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
+					// 型出現済みであれば、2回以上出現したので構文エラー
+					// 解析ツリーに出現トークンを登録
+					this.push_parse_node('declaration-specifier', 'duplicate_type_specify');
+				} else {
+					// 未出現であれば問題なし
+					// 解析ツリーに出現トークンを登録
+					this.push_parse_node('declaration-specifier');
+					// type-specifier-infoを更新
+					this.type_spec_info.spec_def = this.get_token_id();
+				}
 				break;
 			case 'struct':
-			case 'union':
 				// declaration-specifiers の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
 					// 型出現済みであれば、2回以上出現したので構文エラー
 					// struct or union であれば、struct-or-union-specifierの解析開始
 					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'decl-specifiers_re', 'duplicate_type_specify');
 				} else {
 					// struct or union であれば、struct-or-union-specifierの解析開始
 					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'decl-specifiers_re');
+					// type-specifier-infoを更新
+					this.type_spec_info.struct_def = true;
 				}
-				// type-specifierが出現
-				this.is_type_appear = true;
+				break;
+			case 'union':
+				// declaration-specifiers の一連の解析内で型が出現済みか判定
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
+					// 型出現済みであれば、2回以上出現したので構文エラー
+					// struct or union であれば、struct-or-union-specifierの解析開始
+					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'decl-specifiers_re', 'duplicate_type_specify');
+				} else {
+					// struct or union であれば、struct-or-union-specifierの解析開始
+					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'decl-specifiers_re');
+					// type-specifier-infoを更新
+					this.type_spec_info.union_def = true;
+				}
 				break;
 			case 'enum':
 				// declaration-specifiers の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
 					// struct or union であれば、enum-specifierの解析開始
 					this.switch_new_context('enum-specifier', 'enum-spec', 'decl-specifiers_re', 'duplicate_type_specify');
 				} else {
 					// struct or union であれば、enum-specifierの解析開始
 					this.switch_new_context('enum-specifier', 'enum-spec', 'decl-specifiers_re');
+					// type-specifier-infoを更新
+					this.type_spec_info.enum_def = true;
 				}
-				// type-specifierが出現
-				this.is_type_appear = true;
 				break;
 
 			case 'identifier':
 				// typedefとして定義された型か判定
 				if (this.is_typedef_token()) {
 					// declaration-specifiers の一連の解析内で型が出現済みか判定
-					if (this.is_type_appear) {
+					if (this.is_type_spec_duplicated(this.get_token_id())) {
 						// 型定義済み かつ 型出現済みであれば、2回以上出現したので構文エラー
 						// 解析ツリーに出現トークンを登録
 						this.push_parse_node('declaration-specifier', 'duplicate_type_specify');
@@ -2351,19 +2397,21 @@ export class parser {
 						// 型定義済み かつ 未出現であれば問題なし
 						// 解析ツリーに出現トークンを登録
 						this.push_parse_node('declaration-specifier');
+						// type-specifier-infoを更新
+						this.type_spec_info.id_def = this.get_token_str();
 					}
 				} else {
 					// declaration-specifiers の一連の解析内で型が出現済みか判定
-					if (this.is_type_appear) {
+					if (this.is_type_spec_duplicated(this.get_token_id())) {
 						// 型未定義 かつ 型出現済みであれば、declaratorとみなして解析終了
 						finish = true;
 					} else {
 						// 型未定義 かつ 未出現であれば型とみなして解析継続
 						this.push_parse_node('declaration-specifier', 'unknown_type');
+						// type-specifier-infoを更新
+						this.type_spec_info.id_def = this.get_token_str();
 					}
 				}
-				// type-specifierが出現
-				this.is_type_appear = true;
 				break;
 
 			case 'EOF':
@@ -3290,7 +3338,7 @@ export class parser {
 		finish = false;
 
 		// type-specifierの出現有無を初期化
-		this.is_type_appear = false;
+		this.init_type_spec_info();
 
 		// 空白を事前にスキップ
 		this.skip_whitespace();
@@ -3306,19 +3354,10 @@ export class parser {
 				break;
 
 			// type-specifier
-			case 'void':
-			case 'char':
-			case 'short':
-			case 'int':
-			case 'long':
-			case 'float':
-			case 'double':
 			case 'signed':
 			case 'unsigned':
-			case '_Bool':
-			case '_Complex':
 				// specifier-quailifier-list の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
 					// 型出現済みであれば、2回以上出現したので構文エラー
 					// 解析ツリーに出現トークンを登録
 					this.push_parse_node('type-specifier', 'duplicate_type_specify');
@@ -3326,40 +3365,75 @@ export class parser {
 					// 未出現であれば問題なし
 					// 解析ツリーに出現トークンを登録
 					this.push_parse_node('type-specifier');
+					// type-specifier-infoを更新
+					this.type_spec_info.sign_def = this.get_token_id();
 				}
-				// type-specifierが出現
-				this.is_type_appear = true;
+				this.state = 'sq-list_re';
+				break;
+			case 'void':
+			case 'char':
+			case 'short':
+			case 'int':
+			case 'long':
+			case 'float':
+			case 'double':
+			case '_Bool':
+			case '_Complex':
+				// specifier-quailifier-list の一連の解析内で型が出現済みか判定
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
+					// 型出現済みであれば、2回以上出現したので構文エラー
+					// 解析ツリーに出現トークンを登録
+					this.push_parse_node('type-specifier', 'duplicate_type_specify');
+				} else {
+					// 未出現であれば問題なし
+					// 解析ツリーに出現トークンを登録
+					this.push_parse_node('type-specifier');
+					// type-specifier-infoを更新
+					this.type_spec_info.spec_def = this.get_token_id();
+				}
 				this.state = 'sq-list_re';
 				break;
 
 			// type-specifier/struct or union
 			case 'struct':
-			case 'union':
 				// specifier-quailifier-list の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
 					// 型出現済みであれば、2回以上出現したので構文エラー
 					// struct or union であれば、struct-or-union-specifierの解析開始
 					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'sq-list_re', 'duplicate_type_specify');
 				} else {
 					// struct or union であれば、struct-or-union-specifierの解析開始
 					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'sq-list_re');
+					// type-specifier-infoを更新
+					this.type_spec_info.struct_def = true;
 				}
-				// type-specifierが出現
-				this.is_type_appear = true;
+				break;
+			case 'union':
+				// specifier-quailifier-list の一連の解析内で型が出現済みか判定
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
+					// 型出現済みであれば、2回以上出現したので構文エラー
+					// struct or union であれば、struct-or-union-specifierの解析開始
+					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'sq-list_re', 'duplicate_type_specify');
+				} else {
+					// struct or union であれば、struct-or-union-specifierの解析開始
+					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'sq-list_re');
+					// type-specifier-infoを更新
+					this.type_spec_info.union_def = true;
+				}
 				break;
 
 			// type-specifier/enum
 			case 'enum':
 				// specifier-quailifier-list の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
 					// struct or union であれば、enum-specifierの解析開始
 					this.switch_new_context('enum-specifier', 'enum-spec', 'sq-list_re', 'duplicate_type_specify');
 				} else {
 					// struct or union であれば、enum-specifierの解析開始
 					this.switch_new_context('enum-specifier', 'enum-spec', 'sq-list_re');
+					// type-specifier-infoを更新
+					this.type_spec_info.enum_def = true;
 				}
-				// type-specifierが出現
-				this.is_type_appear = true;
 				break;
 
 			// type-specifier/typedef
@@ -3367,7 +3441,7 @@ export class parser {
 				// typedefとして定義された型か判定
 				if (this.is_typedef_token()) {
 					// specifier-quailifier-list の一連の解析内で型が出現済みか判定
-					if (this.is_type_appear) {
+					if (this.is_type_spec_duplicated(this.get_token_id())) {
 						// 型定義済み かつ 型出現済みであれば、2回以上出現したので構文エラー
 						// 解析ツリーに出現トークンを登録
 						this.push_parse_node('type-specifier', 'duplicate_type_specify');
@@ -3375,19 +3449,21 @@ export class parser {
 						// 型定義済み かつ 未出現であれば問題なし
 						// 解析ツリーに出現トークンを登録
 						this.push_parse_node('type-specifier');
+						// type-specifier-infoを更新
+						this.type_spec_info.id_def = this.get_token_str();
 					}
 				} else {
 					// specifier-quailifier-list の一連の解析内で型が出現済みか判定
-					if (this.is_type_appear) {
+					if (this.is_type_spec_duplicated(this.get_token_id())) {
 						// 型未定義 かつ 型出現済みであれば、declaratorとみなして解析終了
 						finish = true;
 					} else {
 						// 型未定義 かつ 未出現であれば型とみなして解析継続
 						this.push_parse_node('type-specifier', 'unknown_type');
+						// type-specifier-infoを更新
+						this.type_spec_info.id_def = this.get_token_str();
 					}
 				}
-				// type-specifierが出現
-				this.is_type_appear = true;
 				this.state = 'sq-list_re';
 				break;
 
@@ -3432,19 +3508,10 @@ export class parser {
 				break;
 
 			// type-specifier
-			case 'void':
-			case 'char':
-			case 'short':
-			case 'int':
-			case 'long':
-			case 'float':
-			case 'double':
 			case 'signed':
 			case 'unsigned':
-			case '_Bool':
-			case '_Complex':
 				// specifier-quailifier-list の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
 					// 型出現済みであれば、2回以上出現したので構文エラー
 					// 解析ツリーに出現トークンを登録
 					this.push_parse_node('type-specifier', 'duplicate_type_specify');
@@ -3452,39 +3519,75 @@ export class parser {
 					// 未出現であれば問題なし
 					// 解析ツリーに出現トークンを登録
 					this.push_parse_node('type-specifier');
+					// type-specifier-infoを更新
+					this.type_spec_info.sign_def = this.get_token_id();
 				}
-				// type-specifierが出現
-				this.is_type_appear = true;
+				this.state = 'sq-list_re';
+				break;
+			case 'void':
+			case 'char':
+			case 'short':
+			case 'int':
+			case 'long':
+			case 'float':
+			case 'double':
+			case '_Bool':
+			case '_Complex':
+				// specifier-quailifier-list の一連の解析内で型が出現済みか判定
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
+					// 型出現済みであれば、2回以上出現したので構文エラー
+					// 解析ツリーに出現トークンを登録
+					this.push_parse_node('type-specifier', 'duplicate_type_specify');
+				} else {
+					// 未出現であれば問題なし
+					// 解析ツリーに出現トークンを登録
+					this.push_parse_node('type-specifier');
+					// type-specifier-infoを更新
+					this.type_spec_info.spec_def = this.get_token_id();
+				}
+				this.state = 'sq-list_re';
 				break;
 
 			// type-specifier/struct or union
 			case 'struct':
-			case 'union':
 				// specifier-quailifier-list の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
 					// 型出現済みであれば、2回以上出現したので構文エラー
 					// struct or union であれば、struct-or-union-specifierの解析開始
 					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'sq-list_re', 'duplicate_type_specify');
 				} else {
 					// struct or union であれば、struct-or-union-specifierの解析開始
 					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'sq-list_re');
+					// type-specifier-infoを更新
+					this.type_spec_info.struct_def = true;
 				}
-				// type-specifierが出現
-				this.is_type_appear = true;
+				break;
+			case 'union':
+				// specifier-quailifier-list の一連の解析内で型が出現済みか判定
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
+					// 型出現済みであれば、2回以上出現したので構文エラー
+					// struct or union であれば、struct-or-union-specifierの解析開始
+					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'sq-list_re', 'duplicate_type_specify');
+				} else {
+					// struct or union であれば、struct-or-union-specifierの解析開始
+					this.switch_new_context('struct-or-union-specifier', 'struct-or-union-spec', 'sq-list_re');
+					// type-specifier-infoを更新
+					this.type_spec_info.union_def = true;
+				}
 				break;
 
 			// type-specifier/enum
 			case 'enum':
 				// specifier-quailifier-list の一連の解析内で型が出現済みか判定
-				if (this.is_type_appear) {
+				if (this.is_type_spec_duplicated(this.get_token_id())) {
 					// struct or union であれば、enum-specifierの解析開始
 					this.switch_new_context('enum-specifier', 'enum-spec', 'sq-list_re', 'duplicate_type_specify');
 				} else {
 					// struct or union であれば、enum-specifierの解析開始
 					this.switch_new_context('enum-specifier', 'enum-spec', 'sq-list_re');
+					// type-specifier-infoを更新
+					this.type_spec_info.enum_def = true;
 				}
-				// type-specifierが出現
-				this.is_type_appear = true;
 				break;
 
 			// type-specifier/typedef
@@ -3492,7 +3595,7 @@ export class parser {
 				// typedefとして定義された型か判定
 				if (this.is_typedef_token()) {
 					// specifier-quailifier-list の一連の解析内で型が出現済みか判定
-					if (this.is_type_appear) {
+					if (this.is_type_spec_duplicated(this.get_token_id())) {
 						// 型定義済み かつ 型出現済みであれば、2回以上出現したので構文エラー
 						// 解析ツリーに出現トークンを登録
 						this.push_parse_node('type-specifier', 'duplicate_type_specify');
@@ -3500,19 +3603,22 @@ export class parser {
 						// 型定義済み かつ 未出現であれば問題なし
 						// 解析ツリーに出現トークンを登録
 						this.push_parse_node('type-specifier');
+						// type-specifier-infoを更新
+						this.type_spec_info.id_def = this.get_token_str();
 					}
 				} else {
 					// specifier-quailifier-list の一連の解析内で型が出現済みか判定
-					if (this.is_type_appear) {
+					if (this.is_type_spec_duplicated(this.get_token_id())) {
 						// 型未定義 かつ 型出現済みであれば、declaratorとみなして解析終了
 						finish = true;
 					} else {
 						// 型未定義 かつ 未出現であれば型とみなして解析継続
 						this.push_parse_node('type-specifier', 'unknown_type');
+						// type-specifier-infoを更新
+						this.type_spec_info.id_def = this.get_token_str();
 					}
 				}
-				// type-specifierが出現
-				this.is_type_appear = true;
+				this.state = 'sq-list_re';
 				break;
 
 			case 'EOF':
@@ -5934,6 +6040,104 @@ export class parser {
 		return result;
 	}
 
+
+	/**
+	 * type_spec_infoを初期化
+	 */
+	private init_type_spec_info() {
+		this.type_spec_info = {};
+	}
+	/**
+	 * type-specifierにおいて
+	 */
+	private is_type_spec_duplicated(id: token_id): boolean {
+		let result: boolean;
+
+		// false/duplicateなし で初期化
+		result = false;
+
+		switch (id) {
+			case 'signed':
+			case 'unsigned':
+				// signed/unsignedが出現済みだとNG
+				if (this.type_spec_info.sign_def != null) {
+					result = true;
+				}
+				// enum/struct/union/typedef-nameには共起しない
+				if (
+					 (this.type_spec_info.enum_def != null)
+					|| (this.type_spec_info.id_def != null)
+					|| (this.type_spec_info.struct_def != null)
+					|| (this.type_spec_info.union_def != null)
+				) {
+					result = true;
+				}
+				// primitive-typeの修飾はOK
+				if (this.type_spec_info.spec_def != null) {
+					result = false;
+				}
+				break;
+
+			case 'void':
+			case 'char':
+			case 'short':
+			case 'int':
+			case 'long':
+			case 'float':
+			case 'double':
+			case '_Bool':
+			case '_Complex':
+			case '__far':
+			case '__near':
+				// signed/unsignedの修飾はOK
+				if (this.type_spec_info.sign_def != null) {
+					result = false;
+				}
+				// enum/struct/union/typedef-nameには共起しない
+				if (
+					(this.type_spec_info.enum_def != null)
+					|| (this.type_spec_info.id_def != null)
+					|| (this.type_spec_info.struct_def != null)
+					|| (this.type_spec_info.union_def != null)
+				) {
+					result = true;
+				}
+				// primitive-typeが出現済みだとNG
+				if (this.type_spec_info.spec_def != null) {
+					result = true;
+				}
+				break;
+
+			case 'struct':
+			case 'union':
+			case 'enum':
+			case 'identifier':
+				// signed/unsignedが出現済みだとNG
+				if (this.type_spec_info.sign_def != null) {
+					result = true;
+				}
+				// enum/struct/union/typedef-nameには共起しない
+				if (
+					(this.type_spec_info.enum_def != null)
+					|| (this.type_spec_info.id_def != null)
+					|| (this.type_spec_info.struct_def != null)
+					|| (this.type_spec_info.union_def != null)
+				) {
+					result = true;
+				}
+				// primitive-typeが出現済みだとNG
+				if (this.type_spec_info.spec_def != null) {
+					result = true;
+				}
+				break;
+
+			default:
+				// その他tokenはありえない
+				break;
+		}
+
+		return result;
+	}
 
 	/**
 	 * declarationの評価を実施

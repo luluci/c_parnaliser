@@ -66,10 +66,12 @@
     	        user_t_1    .    a           --            ;          
 ////[WHITESPACE][left_paren][identifier]   [right_paren][WHITESPACE][left_brace][WHITESPACE][decimal_constant][comma][WHITESPACE][decimal_constant][WHITESPACE][right_brace][semicolon][NEWLINE]
     	        (           user_def_type_t)                        {                       1                 ,                  2                             }            ;          
-////[WHITESPACE][left_paren][identifier]   [right_paren][WHITESPACE][left_brace][WHITESPACE][decimal_constant][comma][WHITESPACE][decimal_constant][comma][WHITESPACE][right_brace][semicolon][NEWLINE]
-    	        (           user_def_type_t)                        {                       3                 ,                  4                 ,                  }            ;          
+////[WHITESPACE][left_paren][left_paren][identifier]   [right_paren][WHITESPACE][left_brace][WHITESPACE][decimal_constant][comma][WHITESPACE][decimal_constant][comma][WHITESPACE][right_brace][right_paren][dot][identifier][semicolon][NEWLINE]
+    	        (           (           user_def_type_t)                        {                       3                 ,                  4                 ,                  }            )            .    a           ;          
 ////[WHITESPACE][COMMENT]                  [NEWLINE]
     	        // (6.5.3) unary-expression
+////[WHITESPACE][COMMENT]                        [NEWLINE]
+    	        // (6.5.3) unary-operator: one of
 ////[WHITESPACE][decrement_op][identifier][dot][identifier][semicolon][NEWLINE]
     	        --            user_t_1    .    a           ;          
 ////[WHITESPACE][increment_op][identifier][dot][identifier][semicolon][NEWLINE]
@@ -88,6 +90,34 @@
     	        sizeof  (           int  )            ;          
 ////[WHITESPACE][sizeof][left_paren][identifier]   [right_paren][semicolon][NEWLINE]
     	        sizeof  (           user_def_type_t)            ;          
+////[WHITESPACE][COMMENT]                  [NEWLINE]
+    	        // (6.5.4) cast-expression:
+////[WHITESPACE][left_paren][int][right_paren][identifier][dot][identifier][semicolon][NEWLINE]
+    	        (           int  )            user_t_1    .    b           ;          
+////[WHITESPACE][left_paren][char][right_paren][identifier][dot][identifier][semicolon][NEWLINE]
+    	        (           char  )            user_t_1    .    a           ;          
+////[WHITESPACE][left_paren][identifier]   [WHITESPACE][asterisk][right_paren][ampersand][identifier][semicolon][NEWLINE]
+    	        (           user_def_type_t            *         )            &          user_t_1    ;          
+////[WHITESPACE][left_paren][unsigned][WHITESPACE][int][right_paren][decimal_constant][WHITESPACE][left_bracket][identifier][right_bracket][semicolon][NEWLINE]
+    	        (           unsigned              int  )            500                           [             id_ary      ]              ;          
+////[WHITESPACE][left_paren][unsigned][WHITESPACE][char][right_paren][identifier][dot][identifier][semicolon][NEWLINE]
+    	        (           unsigned              char  )            user_t_1    .    a           ;          
+////[WHITESPACE][left_paren][unsigned][WHITESPACE][short][right_paren][identifier][arrow_op][identifier][semicolon][NEWLINE]
+    	        (           unsigned              short  )            user_t_1p   ->        a           ;          
+////[WHITESPACE][left_paren][signed][WHITESPACE][short][right_paren][identifier][dot][identifier][increment_op][semicolon][NEWLINE]
+    	        (           signed              short  )            user_t_1    .    a           ++            ;          
+////[WHITESPACE][left_paren][void][right_paren][identifier][dot][identifier][decrement_op][semicolon][NEWLINE]
+    	        (           void  )            user_t_1    .    a           --            ;          
+////[WHITESPACE][COMMENT]                            [NEWLINE]
+    	        // (6.5.5) multiplicative-expression:
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][asterisk][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       *                     user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][div_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       /                   user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][remain_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       %                      user_t_1    .    b           ;          
+////[WHITESPACE][left_paren][signed][WHITESPACE][short][right_paren][left_paren][left_paren][identifier]   [right_paren][WHITESPACE][left_brace][WHITESPACE][decimal_constant][comma][WHITESPACE][decimal_constant][comma][WHITESPACE][right_brace][right_paren][dot][identifier][WHITESPACE][asterisk][WHITESPACE][identifier][left_bracket][identifier][right_bracket][semicolon][NEWLINE]
+    	        (           signed              short  )            (           (           user_def_type_t)                        {                       3                 ,                  4                 ,                  }            )            .    a                       *                     id_ary      [             id          ]              ;          
 ////[right_brace][NEWLINE]
     }            
 ////

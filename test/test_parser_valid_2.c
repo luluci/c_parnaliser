@@ -32,8 +32,9 @@ void A_2_1_Expressions(void)
 	user_t_1.a++;
 	user_t_1.a--;
 	(user_def_type_t) { 1, 2 };
-	(user_def_type_t) { 3, 4, };
+	((user_def_type_t) { 3, 4, }).a;
 	// (6.5.3) unary-expression
+	// (6.5.3) unary-operator: one of
 	--user_t_1.a;
 	++user_t_1.a;
 	! ~-+(&((&user_t_1)->a))[0];
@@ -43,4 +44,18 @@ void A_2_1_Expressions(void)
 	sizeof !~-+(&((&user_t_1)->a))[0];
 	sizeof(int);
 	sizeof(user_def_type_t);
+	// (6.5.4) cast-expression:
+	(int)user_t_1.b;
+	(char)user_t_1.a;
+	(user_def_type_t *)&user_t_1;
+	(unsigned int)500 [id_ary];
+	(unsigned char)user_t_1.a;
+	(unsigned short)user_t_1p->a;
+	(signed short)user_t_1.a++;
+	(void)user_t_1.a--;
+	// (6.5.5) multiplicative-expression:
+	user_t_1.a * user_t_1.b;
+	user_t_1.a / user_t_1.b;
+	user_t_1.a % user_t_1.b;
+	(signed short)((user_def_type_t) { 3, 4, }).a * id_ary[id];
 }
