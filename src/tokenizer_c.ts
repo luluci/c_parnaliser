@@ -3269,7 +3269,7 @@ export class tokenizer_c implements tokenizer<token_id, token_sub_id> {
 					this.id = 'left_shift_op';
 					this.forward_pos();
 					// 1文字先読み
-					[subst_str, subst_len] = this.get_ahead(2);
+					[subst_str, subst_len] = this.get_ahead(1);
 					if (subst_str == "=") {
 						this.id = 'left_shift_assign_op';
 						this.forward_pos();
@@ -3324,7 +3324,7 @@ export class tokenizer_c implements tokenizer<token_id, token_sub_id> {
 					this.id = 'right_shift_op';
 					this.forward_pos();
 					// 1文字先読み
-					[subst_str, subst_len] = this.get_ahead(2);
+					[subst_str, subst_len] = this.get_ahead(1);
 					if (subst_str == "=") {
 						this.id = 'right_shift_assign_op';
 						this.forward_pos();
@@ -3937,7 +3937,7 @@ export class tokenizer_c implements tokenizer<token_id, token_sub_id> {
 			this.ahead_len = this.text.length - this.pos;
 		}
 		// substringを取得
-		this.ahead_str = this.text.substring(this.pos, this.pos+this.ahead_len);
+		this.ahead_str = this.text.substring(this.pos+this.ahead_len-1, this.pos+this.ahead_len);
 
 		return [this.ahead_str, this.ahead_len];
 	}

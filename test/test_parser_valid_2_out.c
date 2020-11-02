@@ -118,6 +118,90 @@
     	        user_t_1    .    a                       %                      user_t_1    .    b           ;          
 ////[WHITESPACE][left_paren][signed][WHITESPACE][short][right_paren][left_paren][left_paren][identifier]   [right_paren][WHITESPACE][left_brace][WHITESPACE][decimal_constant][comma][WHITESPACE][decimal_constant][comma][WHITESPACE][right_brace][right_paren][dot][identifier][WHITESPACE][asterisk][WHITESPACE][identifier][left_bracket][identifier][right_bracket][semicolon][NEWLINE]
     	        (           signed              short  )            (           (           user_def_type_t)                        {                       3                 ,                  4                 ,                  }            )            .    a                       *                     id_ary      [             id          ]              ;          
+////[WHITESPACE][COMMENT]                      [NEWLINE]
+    	        // (6.5.6) additive-expression:
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][plus][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       +                 user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][minus][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       -                  user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][minus][WHITESPACE][identifier][dot][identifier][WHITESPACE][plus][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       -                  user_t_1    .    b                       +                 user_t_1    .    b           ;          
+////[WHITESPACE][left_paren][signed][WHITESPACE][short][right_paren][left_paren][left_paren][identifier]   [right_paren][WHITESPACE][left_brace][WHITESPACE][decimal_constant][comma][WHITESPACE][decimal_constant][comma][WHITESPACE][right_brace][right_paren][dot][identifier][WHITESPACE][plus][WHITESPACE][identifier][left_bracket][identifier][right_bracket][WHITESPACE][minus][WHITESPACE][left_paren][decrement_op][identifier][dot][identifier][right_paren][WHITESPACE][plus][WHITESPACE][left_paren][identifier][dot][identifier][increment_op][right_paren][semicolon][NEWLINE]
+    	        (           signed              short  )            (           (           user_def_type_t)                        {                       3                 ,                  4                 ,                  }            )            .    a                       +                 id_ary      [             id          ]                          -                  (           --            user_t_1    .    b           )                        +                 (           user_t_1    .    b           ++            )            ;          
+////[WHITESPACE][COMMENT]                   [NEWLINE]
+    	        // (6.5.7) shift-expression:
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][right_shift_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       >>                          user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][left_shift_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       <<                         user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][right_shift_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][right_shift_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][left_shift_op][WHITESPACE][identifier][left_bracket][identifier][right_bracket][WHITESPACE][right_shift_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       >>                          user_t_1    .    b                       >>                          user_t_1    .    b                       <<                         id_ary      [             id          ]                          >>                          user_t_1    .    a           ;          
+////[WHITESPACE][COMMENT]                        [NEWLINE]
+    	        // (6.5.8) relational-expression:
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][gt_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       >                  user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][lt_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       <                  user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][gte_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       >=                  user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][lte_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       <=                  user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][gt_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][gte_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][lte_op][WHITESPACE][identifier][left_bracket][identifier][right_bracket][WHITESPACE][gt_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       >                  user_t_1    .    b                       >=                  user_t_1    .    b                       <=                  id_ary      [             id          ]                          >                  user_t_1    .    a           ;          
+////[WHITESPACE][COMMENT]                      [NEWLINE]
+    	        // (6.5.9) equality-expression:
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][equal_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       ==                    user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][inequal_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       !=                      user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][equal_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][inequal_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][inequal_op][WHITESPACE][identifier][left_bracket][identifier][right_bracket][WHITESPACE][equal_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       ==                    user_t_1    .    b                       !=                      user_t_1    .    b                       !=                      id_ary      [             id          ]                          ==                    user_t_1    .    a           ;          
+////[WHITESPACE][COMMENT]                  [NEWLINE]
+    	        // (6.5.10) AND-expression:
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][ampersand][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       &                      user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][ampersand][WHITESPACE][identifier][dot][identifier][WHITESPACE][ampersand][WHITESPACE][identifier][dot][identifier][WHITESPACE][ampersand][WHITESPACE][identifier][left_bracket][identifier][right_bracket][WHITESPACE][ampersand][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       &                      user_t_1    .    b                       &                      user_t_1    .    b                       &                      id_ary      [             id          ]                          &                      user_t_1    .    a           ;          
+////[WHITESPACE][COMMENT]                           [NEWLINE]
+    	        // (6.5.11) exclusive-OR-expression:
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][bitwise_EXOR_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       ^                            user_t_1    .    b           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][bitwise_EXOR_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][bitwise_EXOR_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][bitwise_EXOR_op][WHITESPACE][identifier][left_bracket][identifier][right_bracket][WHITESPACE][bitwise_EXOR_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       ^                            user_t_1    .    b                       ^                            user_t_1    .    b                       ^                            id_ary      [             id          ]                          ^                            user_t_1    .    a           ;          
+////[WHITESPACE][COMMENT]                           [NEWLINE]
+    	        // (6.5.12) inclusive-OR-expression:
+////[WHITESPACE][identifier][WHITESPACE][bitwise_OR_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        id                      |                          user_t_1    .    a           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][bitwise_OR_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       |                          user_t_1    .    b           ;          
+////[WHITESPACE][identifier][WHITESPACE][bitwise_OR_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][bitwise_OR_op][WHITESPACE][identifier][left_bracket][identifier][right_bracket][WHITESPACE][bitwise_OR_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        id                      |                          user_t_1    .    a                       |                          id_ary      [             id          ]                          |                          user_t_1    .    b           ;          
+////[WHITESPACE][COMMENT]                          [NEWLINE]
+    	        // (6.5.13) logical-AND-expression:
+////[WHITESPACE][identifier][WHITESPACE][logical_AND_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        id                      &&                          user_t_1    .    a           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][logical_AND_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       &&                          user_t_1    .    b           ;          
+////[WHITESPACE][identifier][WHITESPACE][logical_AND_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][logical_AND_op][WHITESPACE][identifier][left_bracket][identifier][right_bracket][WHITESPACE][logical_AND_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        id                      &&                          user_t_1    .    a                       &&                          id_ary      [             id          ]                          &&                          user_t_1    .    b           ;          
+////[WHITESPACE][COMMENT]                         [NEWLINE]
+    	        // (6.5.14) logical-OR-expression:
+////[WHITESPACE][identifier][WHITESPACE][logical_OR_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        id                      ||                         user_t_1    .    a           ;          
+////[WHITESPACE][identifier][dot][identifier][WHITESPACE][logical_OR_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        user_t_1    .    a                       ||                         user_t_1    .    b           ;          
+////[WHITESPACE][identifier][WHITESPACE][logical_OR_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][logical_OR_op][WHITESPACE][identifier][left_bracket][identifier][right_bracket][WHITESPACE][logical_OR_op][WHITESPACE][identifier][dot][identifier][semicolon][NEWLINE]
+    	        id                      ||                         user_t_1    .    a                       ||                         id_ary      [             id          ]                          ||                         user_t_1    .    b           ;          
+////[WHITESPACE][COMMENT]                          [NEWLINE]
+    	        // (6.5.15) conditional-expression:
+////[WHITESPACE][left_paren][left_paren][identifier][dot][identifier][WHITESPACE][bitwise_OR_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][ampersand][WHITESPACE][identifier][dot][identifier][WHITESPACE][bitwise_EXOR_op][WHITESPACE][identifier][left_bracket][identifier][right_bracket][right_paren][WHITESPACE][bitwise_EXOR_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][logical_AND_op][WHITESPACE][identifier][WHITESPACE][logical_OR_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][inequal_op][WHITESPACE][identifier][right_paren][WHITESPACE][conditional_op][WHITESPACE][identifier][WHITESPACE][colon][WHITESPACE][left_paren][signed][WHITESPACE][short][right_paren][left_paren][left_paren][identifier]   [right_paren][WHITESPACE][left_brace][WHITESPACE][decimal_constant][comma][WHITESPACE][decimal_constant][comma][WHITESPACE][right_brace][right_paren][dot][identifier][WHITESPACE][plus][WHITESPACE][identifier][left_bracket][identifier][right_bracket][WHITESPACE][minus][WHITESPACE][left_paren][decrement_op][identifier][dot][identifier][right_paren][WHITESPACE][plus][WHITESPACE][left_paren][identifier][dot][identifier][increment_op][right_paren][semicolon][NEWLINE]
+    	        (           (           user_t_1    .    a                       |                          user_t_1    .    b                       &                      user_t_1    .    b                       ^                            id_ary      [             id          ]              )                        ^                            user_t_1    .    a                       &&                          id                      ||                         user_t_1    .    a                       !=                      id          )                        ?                           id                      :                  (           signed              short  )            (           (           user_def_type_t)                        {                       3                 ,                  4                 ,                  }            )            .    a                       +                 id_ary      [             id          ]                          -                  (           --            user_t_1    .    b           )                        +                 (           user_t_1    .    b           ++            )            ;          
+////[WHITESPACE][COMMENT]                         [NEWLINE]
+    	        // (6.5.16) assignment-expression:
+////[WHITESPACE][identifier][WHITESPACE][simple_assign_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][simple_assign_op][WHITESPACE][identifier][left_bracket][identifier][right_bracket][WHITESPACE][simple_assign_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][simple_assign_op][WHITESPACE][identifier][semicolon][NEWLINE]
+    	        id                      =                             user_t_1    .    a                       =                             id_ary      [             id          ]                          =                             user_t_1    .    b                       =                             id          ;          
+////[WHITESPACE][identifier][WHITESPACE][mul_assign_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][div_assign_op][WHITESPACE][identifier][left_bracket][identifier][right_bracket][WHITESPACE][remain_assign_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][add_assign_op][WHITESPACE][identifier][WHITESPACE][sub_assign_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][left_shift_assign_op][WHITESPACE][identifier][left_bracket][identifier][right_bracket][WHITESPACE][right_shift_assign_op][WHITESPACE][identifier][dot][identifier][WHITESPACE][simple_assign_op][WHITESPACE][identifier][semicolon][NEWLINE]
+    	        id                      *=                         user_t_1    .    a                       /=                         id_ary      [             id          ]                          %=                            user_t_1    .    b                       +=                         id                      -=                         user_t_1    .    a                       <<=                               id_ary      [             id          ]                          >>=                                user_t_1    .    b                       =                             id          ;          
 ////[right_brace][NEWLINE]
     }            
 ////

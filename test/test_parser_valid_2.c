@@ -58,4 +58,46 @@ void A_2_1_Expressions(void)
 	user_t_1.a / user_t_1.b;
 	user_t_1.a % user_t_1.b;
 	(signed short)((user_def_type_t) { 3, 4, }).a * id_ary[id];
+	// (6.5.6) additive-expression:
+	user_t_1.a + user_t_1.b;
+	user_t_1.a - user_t_1.b;
+	user_t_1.a - user_t_1.b + user_t_1.b;
+	(signed short)((user_def_type_t) { 3, 4, }).a + id_ary[id] - (--user_t_1.b) + (user_t_1.b++);
+	// (6.5.7) shift-expression:
+	user_t_1.a >> user_t_1.b;
+	user_t_1.a << user_t_1.b;
+	user_t_1.a >> user_t_1.b >> user_t_1.b << id_ary[id] >> user_t_1.a;
+	// (6.5.8) relational-expression:
+	user_t_1.a > user_t_1.b;
+	user_t_1.a < user_t_1.b;
+	user_t_1.a >= user_t_1.b;
+	user_t_1.a <= user_t_1.b;
+	user_t_1.a > user_t_1.b >= user_t_1.b <= id_ary[id] > user_t_1.a;
+	// (6.5.9) equality-expression:
+	user_t_1.a == user_t_1.b;
+	user_t_1.a != user_t_1.b;
+	user_t_1.a == user_t_1.b != user_t_1.b != id_ary[id] == user_t_1.a;
+	// (6.5.10) AND-expression:
+	user_t_1.a & user_t_1.b;
+	user_t_1.a & user_t_1.b & user_t_1.b & id_ary[id] & user_t_1.a;
+	// (6.5.11) exclusive-OR-expression:
+	user_t_1.a ^ user_t_1.b;
+	user_t_1.a ^ user_t_1.b ^ user_t_1.b ^ id_ary[id] ^ user_t_1.a;
+	// (6.5.12) inclusive-OR-expression:
+	id | user_t_1.a;
+	user_t_1.a | user_t_1.b;
+	id | user_t_1.a | id_ary[id] | user_t_1.b;
+	// (6.5.13) logical-AND-expression:
+	id && user_t_1.a;
+	user_t_1.a && user_t_1.b;
+	id && user_t_1.a && id_ary[id] && user_t_1.b;
+	// (6.5.14) logical-OR-expression:
+	id || user_t_1.a;
+	user_t_1.a || user_t_1.b;
+	id || user_t_1.a || id_ary[id] || user_t_1.b;
+	// (6.5.15) conditional-expression:
+	((user_t_1.a | user_t_1.b & user_t_1.b ^ id_ary[id]) ^ user_t_1.a && id || user_t_1.a != id) ? id : (signed short)((user_def_type_t) { 3, 4, }).a + id_ary[id] - (--user_t_1.b) + (user_t_1.b++);
+	// (6.5.16) assignment-expression:
+	id = user_t_1.a = id_ary[id] = user_t_1.b = id;
+	id *= user_t_1.a /= id_ary[id] %= user_t_1.b += id -= user_t_1.a <<= id_ary[id] >>= user_t_1.b = id;
 }
