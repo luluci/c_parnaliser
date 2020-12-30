@@ -559,8 +559,8 @@ export class parse_node {
 			// parse 失敗でroot定義されたノードまで戻る
 			return false;
 		}
-		// カレントノード後処理実行
-		curr._run_exec_post();
+		// ノード後処理実行
+		this._run_exec_post();
 		return result;
 	}
 	/**
@@ -1127,6 +1127,7 @@ export class parser {
 			]);
 
 		this.pn_root = pn_postfix_expr;
+		this.pn_root.exec_post(this.at_exec_post);
 	}
 
 
@@ -1150,7 +1151,7 @@ export class parser {
 		// 条件なし
 		return true;
 	}
-	private at_exec_post(): void {
+	private at_exec_post = (): void => {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 	}
