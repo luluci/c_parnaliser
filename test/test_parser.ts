@@ -2,7 +2,8 @@
 
 import fs from 'fs';
 import path from 'path';
-import { parser, parse_tree_node, lex_info } from '../src/parser'
+//import { parser, parse_tree_node, lex_info } from '../src/parser'
+import { parser, parse_tree_node, lex_info } from '../src/parser2'
 
 
 function parser_tree_dump(tree: parse_tree_node, out_fd: number) {
@@ -132,6 +133,8 @@ function parser_test(file_path: string) {
 	let parse_file_path = path.parse(file_path);
 	outfile_path = parse_file_path.dir + "/" + parse_file_path.name + "_out" + parse_file_path.ext;
 	const fd = fs.openSync(outfile_path, "w");
+
+	console.time('parser time:');
 	// parser作成
 	let parse: parser;
 	parse = new parser(text);
@@ -141,11 +144,14 @@ function parser_test(file_path: string) {
 	while (parse.exec()) {
 		tree = parse.parse_tree;
 	}
+	console.timeEnd('parser time:');
 	parser_tree_dump(parse.parse_tree, fd);
 	console.log("@test finish");
 }
 
+
 //parser_test('./test/test_parser_valid_1.c');
-parser_test('./test/test_parser_valid_2.c');
+//parser_test('./test/test_parser_valid_2.c');
 //parser_test('./test/test_parser_valid_3.c');
+parser_test('./test/test_parser_valid_0.c');
 

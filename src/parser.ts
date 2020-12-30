@@ -4500,7 +4500,7 @@ export class parser {
 			this.set_current_context_error('not_found_right_paren');
 		}
 
-		// statement解析へ以降する
+		// statement解析へ遷移する
 		this.switch_new_context('statement', 'statement', 'statement_if_state');
 
 		return finish;

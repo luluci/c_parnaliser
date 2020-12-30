@@ -100,4 +100,8 @@ void A_2_1_Expressions(void)
 	// (6.5.16) assignment-expression:
 	id = user_t_1.a = id_ary[id] = user_t_1.b = id;
 	id *= user_t_1.a /= id_ary[id] %= user_t_1.b += id -= user_t_1.a <<= id_ary[id] >>= user_t_1.b = id;
+	// (6.5.17) expression:
+	id_func((*(&(&id)[12 + 23])), 300, "str3", ((long *)id_ary + 1 * 10 / 2), (400 - 200) * (1), (&((&user_t_1)->a) + 1)),
+	sizeof !~-+(&((&user_t_1)->a))[0],
+	((user_t_1.a | user_t_1.b & user_t_1.b ^ id_ary[id]) ^ user_t_1.a && id || user_t_1.a != id) ? id : (signed short)((user_def_type_t) { 3, 4, }).a + id_ary[id] - (--user_t_1.b) + (user_t_1.b++);
 }
