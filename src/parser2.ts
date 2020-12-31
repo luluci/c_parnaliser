@@ -429,6 +429,17 @@ let pngen = parse_node_generator;
 let ptgen = parse_tree_generator;
 
 
+type parse_node_type =
+	| 'root'				// ルートノード
+	| 'hub'					// 接続用ハブノード
+	| 'seq'					// seqノード
+	| 'or'					// orノード
+	| 'opt'					// optノード
+	| 'many'				// manyノード
+	| 'many1'				// many1ノード
+	| 'else'				// elseマッチノード
+	| 'node';				// 通常ノード
+
 type parse_check_result =
 	| 'check_ok'			// 状態遷移可能
 	| 'check_ng'			// 状態遷移不可
@@ -440,6 +451,7 @@ export class parse_node {
 	private _check: parse_state_check | null;				// 状態遷移チェック
 	private _action: parse_state_action | null;				// 状態処理
 	private _action_post: parse_state_action | null;		// 状態後処理(状態処理実施後に常に実施)
+	private _node_type: parse_node_type;
 	private _is_root: boolean;				// ルートノード(非子ノード)
 	private _is_or: boolean;				// |
 	private _is_many: boolean;				// *
@@ -450,11 +462,11 @@ export class parse_node {
 	// 構造イメージ：( node.child.child... ).seq( node.child... ).seq( ... )
 	// orで分岐したら合流はしない
 	private _seq: parse_node[];				// 次ノード
-	private _seq_else: parse_node | null;	// 次ノードのいずれにもマッチしなかった
+	private _else: parse_node | null;		// 次ノードのいずれにもマッチしなかった
 	private _child: parse_node[];			// 子ノード
 	// 次ノード解析情報
 	private _prev: parse_node | null;		// 親ノード、ルート要素であればnullになる
-	private _tail: parse_node | null;		// 
+	private _tail: parse_node;				// 
 	// 子ノード解析情報
 	private _parent: parse_node | null;
 	private _parse_idx: number;
@@ -476,6 +488,8 @@ export class parse_node {
 		if (action == null) this._action = null;
 		else this._action = action;
 		this._action_post = null;
+		this._node_type = 'node';
+	
 		this._is_root = false;
 		this._is_or = false;
 		this._is_many = false;
@@ -484,11 +498,11 @@ export class parse_node {
 		this._is_else = false;
 		// 
 		this._seq = [];
-		this._seq_else = null;
+		this._else = null;
 		this._child = [];
 		//
 		this._prev = null;
-		this._tail = null;
+		this._tail = this;
 		//
 		this._parent = null;
 		this._parse_idx = 0;
@@ -503,18 +517,212 @@ export class parse_node {
 	 * @param state 
 	 */
 	static root(state: parse_state, check?: parse_state_check, action?: parse_state_action): parse_node {
-		return new parse_node(state);
+		return new parse_node(state, check, action)._set_type('root');
 	}
 	static node(state: parse_state, check?: parse_state_check, action?: parse_state_action): parse_node {
-		return new parse_node(state);
+		return new parse_node(state, check, action)._set_type('node');
+	}
+	static hub(state: parse_state, check?: parse_state_check, action?: parse_state_action): parse_node {
+		return new parse_node(state, check, action)._set_type('hub');
 	}
 
-	private state_check_root(): boolean {
-		return true;
+	private _set_type(node_type: parse_node_type): parse_node {
+		this._node_type = node_type;
+		return this;
 	}
-	private state_action_root(): void {
-		// 処理なし
+
+	// ツリーコンストラクト
+	//--------------------------
+	// node          : [(node_type)]
+	// child connect : +-            (no annotation)
+	// seq connect   : +->           (has '>' annotation)
+	//--------------------------
+	// ParseTree image
+	//  [root]->[hub]----------------->[hub]-------->[hub]
+	//          +-[or]                 +-[many]      +-[seq]
+	//            +-[hub]-+->[nodeA]     +-[nodeC]     +-[nodeD-seq1]
+	//                    `->[nodeB]                   +-[nodeD-seq2]
+	//
+	//  [nodeA]-[nodeA-1]-seq->[nodeA-2]-seq->[nodeA-3]
+	//                          +[child1]      |(many)
+	//                          +[child2]      +[child1]
+	//
+	//-------------------------
+	// Method ref
+	//	[method]	[description]
+	//	seq			>>	次へ
+	//	or			|	どちらか
+	//	opt			?	0 or 1回
+	//	many		*	0回以上繰り返す
+	//	many1		+	1回以上繰り返す
+	//-------------------------
+	// public method -> thisに新しいノードを作成して接続する
+	// static method -> 新しいノードを作成して返す
+	public seq(node: parse_node[]): parse_node {
+		// 空チェックしてseq追加を実施
+		if (node.length > 0) {
+			this._seq_impl(node);
+		}
+		return this;
 	}
+	static seq(nodes: parse_node[]): parse_node {
+		// 空チェック
+		if (nodes.length == 0) throw new Error("ParseTree:InvalidConstruct:seq() require least one more node.");
+		// seqノードを生成
+		// 引数で渡されたノードへの参照をchildとする。
+		let new_node = new parse_node(nodes[0]._state)._set_type('seq');
+		for (let node of nodes) {
+			new_node._child.push(node);
+		}
+		return new_node;
+	}
+	private _seq_impl(nodes: parse_node[]): void {
+		// orで分岐している場合は後ろに結合できないのでNG
+		if (this._tail._seq.length > 1) {
+			throw new Error("ParseTree:InvalidOpe:Forbidden push seq, after or().")
+		}
+		// seqノードを作成
+		let new_node = parse_node.seq(nodes);
+		// ノード登録
+		this._seq_push(new_node);
+	}
+	private _seq_push(node: parse_node): void {
+		// tailに追加
+		this._tail._seq.push(node);
+		// tail更新
+		this._tail = node;
+	}
+	/**
+	 * opt  
+	 * optional定義  
+	 * ?  
+	 * 0or1回マッチするノードを生成する。
+	 * @param node 
+	 */
+	public opt(node: parse_node): parse_node {
+		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
+		let new_node = parse_node.opt(node);
+		// ノード登録
+		this._seq_push(new_node);
+		return this;
+	}
+	static opt(node: parse_node): parse_node {
+		// optノードを生成
+		// 引数で渡されたノードへの参照をchildとする。
+		let new_node = new parse_node(node._state)._set_type('opt');
+		new_node._child.push(node);
+		return new_node;
+	}
+	/**
+	 * or  
+	 * |  
+	 * orで枝分かれした後に合流は実装しない。
+	 * @param child 
+	 */
+	public or(child: parse_node[]): parse_node {
+		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
+		let node = parse_node.or(child);
+		// ノード登録
+		this._seq_push(node);
+		return this;
+	}
+	static or(nodes: parse_node[]): parse_node {
+		// 空チェック
+		if (nodes.length == 0) throw new Error("ParseTree:InvalidConstruct:or() require least one more node.");
+		// orノードを生成
+		// 引数で渡されたノードへの参照をchildとする。
+		let new_node = new parse_node(nodes[0]._state)._set_type('or');
+		for (let node of nodes) {
+			// 特殊ノード判定
+			if (node._node_type == 'else') {
+				// elseノードは個別に設定
+				new_node._set_else(node);
+			} else {
+				// その他ノードはseqに登録。
+				new_node._seq.push(node);
+			}
+		}
+		return new_node;
+	}
+	/**
+	 * many
+	 * 
+	 * @param child 
+	 */
+	public many(child: parse_node): parse_node {
+		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
+		let node = parse_node.many(child);
+		// ノード登録
+		this._seq_push(node);
+		return this;
+	}
+	static many(node: parse_node): parse_node {
+		// manyノードを生成
+		// 引数で渡されたノードへの参照をchildとする。
+		let new_node = new parse_node(node._state)._set_type('many');
+		new_node._child.push(node);
+		return new_node;
+	}
+	/**
+	 * many1
+	 * 
+	 * @param child 
+	 */
+	public many1(child: parse_node): parse_node {
+		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
+		let node = parse_node.many1(child);
+		// ノード登録
+		this._seq_push(node);
+		return this;
+	}
+	static many1(node: parse_node): parse_node {
+		// many1ノードを生成
+		// 引数で渡されたノードへの参照をchildとする。
+		let new_node = new parse_node(node._state)._set_type('many1');
+		new_node._child.push(node);
+		return new_node;
+	}
+	/** else  
+	 * 条件にマッチしなかった場合のノードを定義する。
+	 * @param parent 
+	 */
+	public else(state: parse_state, action?: parse_state_action): parse_node {
+		// elseノード
+		let node = parse_node.else(state, action);
+		this._set_else(node);
+		return this;
+	}
+	static else(state: parse_state, action?: parse_state_action): parse_node {
+		// いずれにもマッチしなかった場合に遷移とするのでcheckは除外する
+		let new_node = new parse_node(state, undefined, action)._set_type('else');
+		return new_node;
+	}
+	private _set_else(node: parse_node): parse_node {
+		// elseノード
+		if (this._else != null) {
+			throw new Error("ParseTree:InvalidConstruct:else node has duplicated.")
+		}
+		this._else = node;
+		return this;
+	}
+
+	/**
+	 * 状態処理設定
+	 * @param cb 
+	 */
+	public action(cb: parse_state_action): parse_node {
+		this._action = cb;
+		return this;
+	}
+	/**
+	 * 状態処理後処理設定
+	 * @param cb 
+	 */
+	public action_post(cb: parse_state_action): parse_node {
+		this._action_post = cb;
+		return this;
+	}
+
 
 	// static clone(node: parse_node): parse_node {
 	// 	return rfdc()(node);
@@ -522,10 +730,6 @@ export class parse_node {
 	// public clone(): parse_node {
 	// 	return rfdc()(this);
 	// }
-
-	static new(state: parse_state, check: parse_state_check, action: parse_state_action): parse_node {
-		return new parse_node(state, check, action);
-	}
 
 	/**
 	 * パース実行
@@ -679,8 +883,8 @@ export class parse_node {
 	}
 	private _parse_else(curr: parse_node): boolean {
 		let result: boolean = false;
-		if (curr._seq_else != null) {
-			result = this._parse(curr._seq_else);
+		if (curr._else != null) {
+			result = this._parse(curr._else);
 		}
 		return result;
 	}
@@ -820,214 +1024,6 @@ export class parse_node {
 		}
 	}
 
-	/**
-	 * 状態処理設定
-	 * @param cb 
-	 */
-	public action(cb: parse_state_action): parse_node {
-		this._action = cb;
-		return this;
-	}
-	/**
-	 * 状態処理後処理設定
-	 * @param cb 
-	 */
-	public action_post(cb: parse_state_action): parse_node {
-		this._action_post = cb;
-		return this;
-	}
-
-	// ツリーコンストラクト
-	//--------------------------
-	// ParseTree image
-	//  [root]-+-[nodeA]
-	//         +-[nodeB]
-	//
-	//  [nodeA]-[nodeA-1]-seq->[nodeA-2]-seq->[nodeA-3]
-	//                          +[child1]      |(many)
-	//                          +[child2]      +[child1]
-	//
-	//-------------------------
-	// Method ref
-	//	[method]	[description]
-	//	seq			>>	次へ
-	//	or			|	どちらか
-	//	opt			?	0 or 1回
-	//	many		*	0回以上繰り返す
-	//	many1		+	1回以上繰り返す
-	// public method -> child全体を繰り返しとみなす
-	// static method -> 対象nodeのみを繰り返しとみなす
-	public seq(node: parse_node[]): parse_node {
-		// 空チェックしてseq追加を実施
-		if (node.length > 0) {
-			this._seq_impl(node);
-		}
-		return this;
-	}
-	private _seq_impl(nodes: parse_node[]): void {
-		// tailチェック
-		if (this._tail == null) {
-			this._set_tail();
-			this._tail = this._tail!;		// non-Null Checked
-		}
-		// orで分岐している場合は後ろに結合できないのでNG
-		if (this._tail!._seq.length > 1) {
-			throw new Error("ParseTree:InvalidOpe:Forbidden push seq, after or().")
-		}
-		// tailにseq追加
-		let node_ref: parse_node = this._tail;
-		for (let seq of nodes) {
-			let temp_node = new parse_node(seq._state);
-			temp_node._child.push(seq);
-			node_ref._seq.push(temp_node);
-			node_ref = temp_node;
-		}
-		// tail更新
-		this._tail = node_ref;
-	}
-	static seq(child: parse_node[]): parse_node {
-		let [first, ...remain] = child;
-		if (remain.length > 0) first.seq(remain);
-		return first;
-	}
-	/**
-	 * opt  
-	 * optional定義  
-	 * ?  
-	 * 0or1回マッチするノードを生成する。
-	 * @param child 
-	 */
-	public opt(child: parse_node): parse_node {
-		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
-		let node = new parse_node( child._state );
-		node._child.push( child );
-		node._is_opt = true;
-		// 管理ノードをseqとして追加する
-		return this.seq([node]);
-	}
-	static opt(child: parse_node): parse_node {
-		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
-		let node = new parse_node(child._state);
-		node._child.push(child);
-		node._is_opt = true;
-		return node;
-	}
-	/**
-	 * or  
-	 * |  
-	 * orで枝分かれした後に合流は実装しない。
-	 * @param child 
-	 */
-	public or(child: parse_node[]): parse_node {
-		// 管理ノードを生成し、引数で渡されたノードへの参照をseqとする。
-		// 先頭ノードの名前を使う。この名前は処理上使わないのでなんでもいい
-		if (child.length == 0) throw new Error("ParseTree:InvalidConstruct:or method require least 1node.");
-		let node = new parse_node(child[0]._state);
-		// 新規ノードにorノードを登録
-		for (let child_node of child) {
-			// 特殊ノード判定
-			if (child_node._is_else) {
-				// elseノードは個別に設定
-				if (child_node._seq_else != null) {
-					throw new Error("ParseTree:InvalidOpe:else node has duplicated.")
-				}
-				node._seq_else = child_node;
-			} else {
-				// その他ノードはseqに登録。
-				node._seq.push(child_node);
-			}
-		}
-		let mng_node = new parse_node(node._state);
-		mng_node._child.push(node);
-		// 管理ノードをseqとして追加する
-		return this.seq([mng_node]);
-	}
-	/**
-	 * many
-	 * 
-	 * @param child 
-	 */
-	public many(child: parse_node): parse_node {
-		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
-		let node = new parse_node(child._state);
-		node._child.push(child);
-		node._is_many = true;
-		// 管理ノードをseqとして追加する
-		return this.seq([node]);
-	}
-	static many(child: parse_node): parse_node {
-		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
-		let node = new parse_node(child._state);
-		node._child.push(child);
-		node._is_many = true;
-		// 管理ノードをseqとして追加する
-		return node;
-	}
-	/**
-	 * many1
-	 * 
-	 * @param child 
-	 */
-	public many1(child: parse_node): parse_node {
-		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
-		let node = new parse_node(child._state);
-		node._child.push(child);
-		node._is_many1 = true;
-		// 管理ノードをseqとして追加する
-		return this.seq([node]);
-	}
-	static many1(child: parse_node): parse_node {
-		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
-		let node = new parse_node(child._state);
-		node._child.push(child);
-		node._is_many1 = true;
-		// 管理ノードをseqとして追加する
-		return node;
-	}
-	/** else  
-	 * 条件にマッチしなかった場合のノードを定義する。
-	 * @param parent 
-	 */
-	static else(state: parse_state, action?: parse_state_action): parse_node {
-		// いずれにもマッチしなかった場合に遷移とするのでcheckは除外する
-		let node = new parse_node(state, undefined, action);
-		node._set_else();
-		return node;
-	}
-
-	private _set_parent(parent: parse_node): parse_node {
-		this._parent = parent;
-		return this;
-	}
-	private _set_child(): parse_node {
-
-		return this;
-	}
-	private _set_opt(): parse_node {
-		this._is_opt = true;
-		return this;
-	}
-	private _set_many(): parse_node {
-		this._is_many = true;
-		return this;
-	}
-	private _set_else(): parse_node {
-		this._is_else = true;
-		return this;
-	}
-
-	private _set_tail(): void {
-		let node_ref: parse_node = this;
-		while (node_ref._seq.length > 0) {
-			// or nodeがあればそこで終了
-			if (node_ref._seq.length > 1) {
-				break;
-			}
-			// 次ノードへの参照を更新
-			node_ref = node_ref._seq[0];
-		}
-		this._tail = node_ref;
-	}
 }
 
 export class parser {
