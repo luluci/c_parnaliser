@@ -382,9 +382,9 @@ type type_specifier_info = {
 
 
 type parse_state_check = () => boolean;
-type parse_state_exec = () => void;
+type parse_state_action = () => void;
 type parse_dict = { [state: string]: parse_node; };
-type parse_node_init = [parse_state, parse_state_check, parse_state_exec];
+type parse_node_init = [parse_state, parse_state_check, parse_state_action];
 
 // 
 class parse_node_generator {
@@ -436,10 +436,10 @@ type parse_check_result =
 
 export class parse_node {
 	// パーサノード情報
-	private _state: parse_state;						// 自状態
-	private _check: parse_state_check | null;			// 状態遷移チェック
-	private _exec: parse_state_exec | null;				// 状態処理
-	private _exec_post: parse_state_exec | null;		// 状態後処理(状態処理実施後に常に実施)
+	private _state: parse_state;							// 自状態
+	private _check: parse_state_check | null;				// 状態遷移チェック
+	private _action: parse_state_action | null;				// 状態処理
+	private _action_post: parse_state_action | null;		// 状態後処理(状態処理実施後に常に実施)
 	private _is_root: boolean;				// ルートノード(非子ノード)
 	private _is_or: boolean;				// |
 	private _is_many: boolean;				// *
@@ -468,14 +468,14 @@ export class parse_node {
 	static readonly LAST_CHECKED_SEQ: number = 0;		// SEQでOK(idxナンバーを設定するのでこの定義は使われない)
 
 	// 自状態を定義する
-	constructor(state: parse_state, check?: parse_state_check, exec?: parse_state_exec) {
+	constructor(state: parse_state, check?: parse_state_check, action?: parse_state_action) {
 		//
 		this._state = state;
 		if (check == null) this._check = null;
 		else this._check = check;
-		if (exec == null) this._exec = null;
-		else this._exec = exec;
-		this._exec_post = null;
+		if (action == null) this._action = null;
+		else this._action = action;
+		this._action_post = null;
 		this._is_root = false;
 		this._is_or = false;
 		this._is_many = false;
@@ -502,17 +502,17 @@ export class parse_node {
 	 * stateだけのnodeを作成する。
 	 * @param state 
 	 */
-	static root(state: parse_state, check?: parse_state_check, exec?: parse_state_exec): parse_node {
+	static root(state: parse_state, check?: parse_state_check, action?: parse_state_action): parse_node {
 		return new parse_node(state);
 	}
-	static node(state: parse_state, check?: parse_state_check, exec?: parse_state_exec): parse_node {
+	static node(state: parse_state, check?: parse_state_check, action?: parse_state_action): parse_node {
 		return new parse_node(state);
 	}
 
 	private state_check_root(): boolean {
 		return true;
 	}
-	private state_exec_root(): void {
+	private state_action_root(): void {
 		// 処理なし
 	}
 
@@ -523,8 +523,8 @@ export class parse_node {
 	// 	return rfdc()(this);
 	// }
 
-	static new(state: parse_state, check: parse_state_check, exec: parse_state_exec): parse_node {
-		return new parse_node(state, check, exec);
+	static new(state: parse_state, check: parse_state_check, action: parse_state_action): parse_node {
+		return new parse_node(state, check, action);
 	}
 
 	/**
@@ -544,7 +544,7 @@ export class parse_node {
 	private _parse(curr: parse_node): boolean {
 		let result: boolean;
 		// カレントノード実行
-		curr._run_exec();
+		curr._run_action();
 		// child実行
 		result = this._parse_child(curr);
 		if (!result) {
@@ -562,7 +562,7 @@ export class parse_node {
 			return false;
 		}
 		// ノード後処理実行
-		this._run_exec_post();
+		this._run_action_post();
 		return result;
 	}
 	/**
@@ -593,25 +593,32 @@ export class parse_node {
 						// 該当ノードのparse実行
 						result = this._parse(node);
 					} else {
-						if (node_idx == 0) {
-							// 先頭ノードの場合
-							if (curr._is_opt || curr._is_many || (curr._is_many1 && curr._is_parsed_once)) {
-								// opt/many/many1であればtrueで次の状態へ
-								result = true;
-								many = false;
-								break;
+						// チェックNG
+						// parse失敗のときelse判定
+						result = this._parse_else(node);
+						if (result) {
+							// elseで成功のとき
+						} else {
+							if (node_idx == 0) {
+								// 先頭ノードの場合
+								if (curr._is_opt || curr._is_many || (curr._is_many1 && curr._is_parsed_once)) {
+									// opt/many/many1であればtrueで次の状態へ
+									result = true;
+									many = false;
+									break;
+								} else {
+									// チェックNG
+									result = false;
+									many = false;
+									break;
+								}
 							} else {
+								// 2つ目以降のノードの場合
 								// チェックNG
 								result = false;
 								many = false;
 								break;
 							}
-						} else {
-							// 2つ目以降のノードの場合
-							// チェックNG
-							result = false;
-							many = false;
-							break;
 						}
 					}
 					// 解析失敗時はroot要素まで返る。root要素であればその次から処理を再開する。
@@ -639,6 +646,10 @@ export class parse_node {
 		}
 		return result;
 	}
+	/**
+	 * 
+	 * @param curr 
+	 */
 	private _parse_seq(curr: parse_node): boolean {
 		let result: boolean;
 		if (curr._seq.length > 0) {
@@ -655,9 +666,7 @@ export class parse_node {
 		}
 		// parse失敗のときelse判定
 		if (!result) {
-			if (curr._seq_else != null) {
-				result = this._parse(curr._seq_else);
-			}
+			result = this._parse_else(curr);
 		}
 		// 解析失敗時はroot要素まで返る。root要素であればその次から処理を再開する。
 		if (!result) {
@@ -665,6 +674,13 @@ export class parse_node {
 			if (curr._is_root) {
 				result = true;
 			}
+		}
+		return result;
+	}
+	private _parse_else(curr: parse_node): boolean {
+		let result: boolean = false;
+		if (curr._seq_else != null) {
+			result = this._parse(curr._seq_else);
 		}
 		return result;
 	}
@@ -791,16 +807,16 @@ export class parse_node {
 	/**
 	 * 自ノードの状態処理を実施
 	 */
-	private _run_exec(): void {
+	private _run_action(): void {
 		// nullのときは何もせず終了
-		if (this._exec != null) {
-			this._exec();
+		if (this._action != null) {
+			this._action();
 		}
 	}
-	private _run_exec_post(): void {
+	private _run_action_post(): void {
 		// nullのときは何もせず終了
-		if (this._exec_post != null) {
-			this._exec_post();
+		if (this._action_post != null) {
+			this._action_post();
 		}
 	}
 
@@ -808,16 +824,16 @@ export class parse_node {
 	 * 状態処理設定
 	 * @param cb 
 	 */
-	public exec(cb: parse_state_exec): parse_node {
-		this._exec = cb;
+	public action(cb: parse_state_action): parse_node {
+		this._action = cb;
 		return this;
 	}
 	/**
 	 * 状態処理後処理設定
 	 * @param cb 
 	 */
-	public exec_post(cb: parse_state_exec): parse_node {
-		this._exec_post = cb;
+	public action_post(cb: parse_state_action): parse_node {
+		this._action_post = cb;
 		return this;
 	}
 
@@ -972,9 +988,9 @@ export class parse_node {
 	 * 条件にマッチしなかった場合のノードを定義する。
 	 * @param parent 
 	 */
-	static else(state: parse_state, exec?: parse_state_exec): parse_node {
+	static else(state: parse_state, action?: parse_state_action): parse_node {
 		// いずれにもマッチしなかった場合に遷移とするのでcheckは除外する
-		let node = new parse_node(state, undefined, exec);
+		let node = new parse_node(state, undefined, action);
 		node._set_else();
 		return node;
 	}
@@ -1156,14 +1172,14 @@ export class parser {
 		let pn_trans_unit: parse_node = pn.node('translation-unit').many(pn_extern_decl);
 		// ルート要素定義
 		// prepro-directive or translation-unit の解析を実施
-		pn_root.exec_post(this.at_exec_post)
+		pn_root.action_post(this.at_post)
 			.or([
 				pn_prepro,
 				pn_trans_unit
 			]);
 
 		this.pn_root = pn_expr;
-		this.pn_root.exec_post(this.at_exec_post);
+		this.pn_root.action_post(this.at_post);
 	}
 
 
@@ -1187,7 +1203,7 @@ export class parser {
 		// 条件なし
 		return true;
 	}
-	private at_exec_post = (): void => {
+	private at_post = (): void => {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
 	}
@@ -1577,7 +1593,7 @@ export class parser {
 		return false;
 	}
 
-	// state entry exec
+	// state entry action
 	private at_null(): void {
 		// 処理なし
 	}
