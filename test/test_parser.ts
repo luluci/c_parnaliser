@@ -134,17 +134,21 @@ function parser_test(file_path: string) {
 	outfile_path = parse_file_path.dir + "/" + parse_file_path.name + "_out" + parse_file_path.ext;
 	const fd = fs.openSync(outfile_path, "w");
 
-	console.time('parser time:');
+//	console.time('parser: whole time:');
+	console.time('parser: construct time:');
 	// parser作成
 	let parse: parser;
 	parse = new parser(text);
+	console.timeEnd('parser: construct time:');
 
+	console.time('parser: parse time:');
 	// 解析
 	let tree: parse_tree_node;
 	while (parse.exec()) {
 		tree = parse.parse_tree;
 	}
-	console.timeEnd('parser time:');
+	console.timeEnd('parser: parse time:');
+//	console.timeEnd('parser: whole time:');
 	parser_tree_dump(parse.parse_tree, fd);
 	console.log("@test finish");
 }

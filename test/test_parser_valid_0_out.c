@@ -1,4 +1,4 @@
-////[identifier][increment_op][WHITESPACE][increment_op][WHITESPACE][decrement_op][WHITESPACE][NEWLINE]
-    hoge        ++                        ++                        --                        
-////
-    
+////[identifier][left_bracket][identifier][right_bracket][NEWLINE]
+    hoge        [             hoga        ]              
+////[string_literal]
+    "fuga"          

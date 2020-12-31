@@ -441,6 +441,7 @@ export class parse_node {
 	private _exec: parse_state_exec | null;				// 状態処理
 	private _exec_post: parse_state_exec | null;		// 状態後処理(状態処理実施後に常に実施)
 	private _is_root: boolean;				// ルートノード(非子ノード)
+	private _is_or: boolean;				// |
 	private _is_many: boolean;				// *
 	private _is_many1: boolean;				// +
 	private _is_opt: boolean;				// ?
@@ -476,6 +477,7 @@ export class parse_node {
 		else this._exec = exec;
 		this._exec_post = null;
 		this._is_root = false;
+		this._is_or = false;
 		this._is_many = false;
 		this._is_many1 = false;
 		this._is_opt = false;
@@ -612,7 +614,21 @@ export class parse_node {
 							break;
 						}
 					}
+					// 解析失敗時はroot要素まで返る。root要素であればその次から処理を再開する。
+					if (!result) {
+						// childがrootノードであれば処理継続
+						if (node._is_root) {
+							result = true;
+						}
+					}
 					node_idx++;
+				}
+				// 解析失敗時はroot要素まで返る。root要素であればその次から処理を再開する。
+				if (!result) {
+					// cuurがrootノードであれば処理継続
+					if (curr._is_root) {
+						result = true;
+					}
 				}
 				// 1回実施完了したのでmany1用にフラグを立てる
 				parsed_once = true;
@@ -641,6 +657,13 @@ export class parse_node {
 		if (!result) {
 			if (curr._seq_else != null) {
 				result = this._parse(curr._seq_else);
+			}
+		}
+		// 解析失敗時はroot要素まで返る。root要素であればその次から処理を再開する。
+		if (!result) {
+			// cuurがrootノードであれば処理継続
+			if (curr._is_root) {
+				result = true;
 			}
 		}
 		return result;
@@ -838,22 +861,18 @@ export class parse_node {
 		// tailにseq追加
 		let node_ref: parse_node = this._tail;
 		for (let seq of nodes) {
-			node_ref._seq.push(seq);
-			node_ref = seq;
+			let temp_node = new parse_node(seq._state);
+			temp_node._child.push(seq);
+			node_ref._seq.push(temp_node);
+			node_ref = temp_node;
 		}
 		// tail更新
 		this._tail = node_ref;
 	}
 	static seq(child: parse_node[]): parse_node {
-		/*
 		let [first, ...remain] = child;
 		if (remain.length > 0) first.seq(remain);
 		return first;
-		*/
-		// seqを管理するノードを生成し、seq指定されたノードへの参照をchildとする。
-		let node = new parse_node('null');
-		node._child = node._child.concat(child);
-		return node;
 	}
 	/**
 	 * opt  
@@ -863,7 +882,7 @@ export class parse_node {
 	 * @param child 
 	 */
 	public opt(child: parse_node): parse_node {
-		// optを管理するノードを生成し、opt指定されたノードへの参照をchildとする。
+		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
 		let node = new parse_node( child._state );
 		node._child.push( child );
 		node._is_opt = true;
@@ -871,7 +890,7 @@ export class parse_node {
 		return this.seq([node]);
 	}
 	static opt(child: parse_node): parse_node {
-		// optを管理するノードを生成し、opt指定されたノードへの参照をchildとする。
+		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
 		let node = new parse_node(child._state);
 		node._child.push(child);
 		node._is_opt = true;
@@ -884,21 +903,28 @@ export class parse_node {
 	 * @param child 
 	 */
 	public or(child: parse_node[]): parse_node {
-		// |
-		for (let node of child) {
+		// 管理ノードを生成し、引数で渡されたノードへの参照をseqとする。
+		// 先頭ノードの名前を使う。この名前は処理上使わないのでなんでもいい
+		if (child.length == 0) throw new Error("ParseTree:InvalidConstruct:or method require least 1node.");
+		let node = new parse_node(child[0]._state);
+		// 新規ノードにorノードを登録
+		for (let child_node of child) {
 			// 特殊ノード判定
-			if (node._is_else) {
+			if (child_node._is_else) {
 				// elseノードは個別に設定
-				if (node._seq_else != null) {
+				if (child_node._seq_else != null) {
 					throw new Error("ParseTree:InvalidOpe:else node has duplicated.")
 				}
-				this._seq_else = node;
+				node._seq_else = child_node;
 			} else {
 				// その他ノードはseqに登録。
-				this._seq.push(node);
+				node._seq.push(child_node);
 			}
 		}
-		return this;
+		let mng_node = new parse_node(node._state);
+		mng_node._child.push(node);
+		// 管理ノードをseqとして追加する
+		return this.seq([mng_node]);
 	}
 	/**
 	 * many
@@ -906,7 +932,7 @@ export class parse_node {
 	 * @param child 
 	 */
 	public many(child: parse_node): parse_node {
-		// optを管理するノードを生成し、opt指定されたノードへの参照をchildとする。
+		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
 		let node = new parse_node(child._state);
 		node._child.push(child);
 		node._is_many = true;
@@ -914,7 +940,7 @@ export class parse_node {
 		return this.seq([node]);
 	}
 	static many(child: parse_node): parse_node {
-		// optを管理するノードを生成し、opt指定されたノードへの参照をchildとする。
+		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
 		let node = new parse_node(child._state);
 		node._child.push(child);
 		node._is_many = true;
@@ -927,7 +953,7 @@ export class parse_node {
 	 * @param child 
 	 */
 	public many1(child: parse_node): parse_node {
-		// optを管理するノードを生成し、opt指定されたノードへの参照をchildとする。
+		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
 		let node = new parse_node(child._state);
 		node._child.push(child);
 		node._is_many1 = true;
@@ -935,7 +961,7 @@ export class parse_node {
 		return this.seq([node]);
 	}
 	static many1(child: parse_node): parse_node {
-		// optを管理するノードを生成し、opt指定されたノードへの参照をchildとする。
+		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
 		let node = new parse_node(child._state);
 		node._child.push(child);
 		node._is_many1 = true;
@@ -1054,6 +1080,14 @@ export class parser {
 		let pn_comma: parse_node = new parse_node('comma', this.ev_comma, this.at_comma);		// 
 		// A.2.1 Expressions
 		// (6.5.1) primary-expression:
+		let pn_primary_expr: parse_node;
+		// (6.5.2) postfix-expression:
+		let pn_postfix_expr_1: parse_node;
+		let pn_postfix_expr_2: parse_node;
+		let pn_postfix_expr: parse_node;
+		// (6.5.2) argument-expression-list:
+		// (6.5.17) expression:
+		let pn_expr: parse_node;
 		// A.2.2 Declarations
 		// (6.7.6) type-name:
 		let pn_typename: parse_node = new parse_node('type-name', this.ev_null, this.at_null);
@@ -1069,13 +1103,13 @@ export class parser {
 		let pn_arg_expr_list: parse_node = new parse_node('argument-expression-list', this.ev_null, this.at_null);				//
 		let pn_decl_list: parse_node = new parse_node('statement', this.ev_null, this.at_null);				// declaration-list
 		let pn_compound_state: parse_node = new parse_node('statement', this.ev_null, this.at_null);		// compound-statement
-		let pn_expr: parse_node = new parse_node('expression', this.ev_null, this.at_null);		// 
 
 		// 解析ツリー作成
 		let pn = parse_node;
 		// A.2.1 Expressions
+		pn_expr = pn.root('expression', this.ev_null, this.at_null);
 		// (6.5.1) primary-expression:
-		let pn_primary_expr: parse_node = pn.root('primary-expression')
+		pn_primary_expr = pn.node('primary-expression')
 			.or([
 				pn_id,
 				pn_const,
@@ -1084,7 +1118,7 @@ export class parser {
 				pn.else('primary-expression_error', this.at_null)
 			]);
 		// (6.5.2) postfix-expression:
-		let pn_postfix_expr_1: parse_node = pn.node('postfix-expression_1')
+		pn_postfix_expr_1 = pn.node('postfix-expression_1')
 			.or([
 				pn.seq([pn_lbracket, pn_expr, pn_rbracket]),
 				pn_lparen.opt(pn_arg_expr_list).seq([pn_rbracket]),
@@ -1094,17 +1128,19 @@ export class parser {
 				pn_decl,
 				pn.else('postfix-expression_error', this.at_null)
 			]);
-		let pn_postfix_expr_2: parse_node = pn.node('postfix-expression_2')
+		pn_postfix_expr_2 = pn.node('postfix-expression_2')
 			.or([
 				pn.seq([pn_lparen, pn_typename, pn_rparen, pn_lbrace, pn_init_list]).opt(pn_comma).seq([pn_rbrace]),
 				pn.else('postfix-expression_error', this.at_null)
 			]);
-		let pn_postfix_expr: parse_node = pn.node('postfix-expression')
+		pn_postfix_expr = pn.node('postfix-expression')
 			.or([
-				pn.seq([pn_primary_expr]).many(pn_postfix_expr_1),
+				pn.seq([pn_primary_expr]).many1(pn_postfix_expr_1),
 				pn_postfix_expr_2
 			]);
 		// (6.5.2) argument-expression-list:
+		// (6.5.17) expression:
+		pn_expr.many(pn_postfix_expr);
 		// A.2.2 Declarations
 		// (6.7.6) type-name:
 		// external-declaration
@@ -1126,7 +1162,7 @@ export class parser {
 				pn_trans_unit
 			]);
 
-		this.pn_root = pn_postfix_expr;
+		this.pn_root = pn_expr;
 		this.pn_root.exec_post(this.at_exec_post);
 	}
 
