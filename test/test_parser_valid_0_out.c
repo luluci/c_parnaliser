@@ -2,5 +2,5 @@
     "fuga"          [             0               ]                          "fuga"          [             1                 ]              
 ////[identifier][left_bracket][identifier][right_bracket][NEWLINE]
     hoge        [             hoga        ]              
-////
+////[EOF]
     

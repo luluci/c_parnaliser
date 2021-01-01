@@ -439,6 +439,7 @@ type parse_node_type =
 	| 'many'				// manyノード
 	| 'many1'				// many1ノード
 	| 'else'				// elseマッチノード
+	| 'eop'					// End of Perseノード
 	| 'node';				// 通常ノード
 
 type parse_check_result =
@@ -452,26 +453,23 @@ export class parse_node {
 	private _check: parse_state_check | null;				// 状態遷移チェック
 	private _action: parse_state_action | null;				// 状態処理
 	private _action_post: parse_state_action | null;		// 状態後処理(状態処理実施後に常に実施)
-	private _node_type: parse_node_type;
-	private _err_stop: boolean;
+	private _node_type: parse_node_type;					// ノードタイプ
+	private _err_stop: boolean;								// エラーストップフラグ
+	private _parse_end: boolean;							// End of Perse到達フラグ
 
 	// パーサテーブル
-	// 構造イメージ：( node.child.child... ).seq( node.child... ).seq( ... )
-	// orで分岐したら合流はしない
-	private _next: parse_node | null;		// 次ノード
-	private _else: parse_node | null;		// 次ノードのいずれにもマッチしなかった
-	private _child: parse_node[];			// 子ノード
+	private _next: parse_node | null;						// 次ノード
+	private _else: parse_node | null;						// 次ノードのいずれにもマッチしなかったケース用ノード
+	private _child: parse_node[];							// 子ノード
 	// 次ノード解析情報
-	private _tail: parse_node;				// 
-	// 子ノード解析情報
+	private _tail: parse_node;								// 末尾ノード
 	// 解析一時情報：解析完了で抜けるときにリセットする
-	private _is_parsed_once: boolean;			// 1回でもパースされたかどうか。many1で使用
-	private _last_checked_idx: number;			// ノード遷移チェックで判定OKになったノード情報
+	private _last_checked_idx: number;						// ノード遷移チェックで判定OKになったノード情報
 	// ノード遷移チェック情報
-	static readonly LAST_CHECKED_NULL: number = -1;		// 未設定/NG
-	static readonly LAST_CHECKED_SELF: number = -2;		// 自身のcheckでOK
-	static readonly LAST_CHECKED_SEQ: number = -3;		// SEQでOK
-	static readonly LAST_CHECKED_CHILD: number = 0;		// CHILDでOK(idxナンバーを設定するのでこの定義は使われない)
+	static readonly LAST_CHECKED_NULL: number = -1;			// 未設定/NG
+	static readonly LAST_CHECKED_SELF: number = -2;			// 自身のcheckでOK
+	static readonly LAST_CHECKED_SEQ: number = -3;			// SEQでOK
+	static readonly LAST_CHECKED_CHILD: number = 0;			// CHILDでOK(idxナンバーを設定するのでこの定義は使われない)
 
 	// パース関数テーブル
 	private _parse_proc_tbl: { [key: string]: parse_proc_t };		// パース処理テーブル
@@ -488,6 +486,7 @@ export class parse_node {
 		this._action_post = null;
 		this._node_type = 'node';
 		this._err_stop = false;
+		this._parse_end = false;
 		// 
 		this._next = null;
 		this._else = null;
@@ -495,8 +494,6 @@ export class parse_node {
 		//
 		this._tail = this;
 		//
-		//
-		this._is_parsed_once = false;
 		this._last_checked_idx = parse_node.LAST_CHECKED_NULL;
 
 		// パース処理テーブル
@@ -510,6 +507,7 @@ export class parse_node {
 		this._parse_proc_tbl['many1'] = this._parse_proc_many1;
 		this._parse_proc_tbl['else'] = this._parse_proc_else;
 		this._parse_proc_tbl['node'] = this._parse_proc_node;
+		this._parse_proc_tbl['eop'] = this._parse_proc_eop;
 		// パース遷移チェックテーブル
 		this._parse_check_tbl = {};
 		this._parse_check_tbl['root'] = this._parse_check_root;
@@ -521,6 +519,7 @@ export class parse_node {
 		this._parse_check_tbl['many1'] = this._parse_check_many1;
 		this._parse_check_tbl['else'] = this._parse_check_else;
 		this._parse_check_tbl['node'] = this._parse_check_node;
+		this._parse_check_tbl['eop'] = this._parse_check_eop;
 	}
 	// construct helper
 	/** 
@@ -536,6 +535,9 @@ export class parse_node {
 	}
 	static hub(state: parse_state, check?: parse_state_check, action?: parse_state_action): parse_node {
 		return new parse_node(state, check, action)._set_type('hub');
+	}
+	static eop(state: parse_state, check?: parse_state_check, action?: parse_state_action): parse_node {
+		return new parse_node(state, check, action)._set_type('eop');
 	}
 
 	private _set_type(node_type: parse_node_type): parse_node {
@@ -742,14 +744,6 @@ export class parse_node {
 		return this;
 	}
 
-
-	// static clone(node: parse_node): parse_node {
-	// 	return rfdc()(node);
-	// }
-	// public clone(): parse_node {
-	// 	return rfdc()(this);
-	// }
-
 	/**
 	 * パース実行
 	 * 
@@ -759,6 +753,9 @@ export class parse_node {
 		let result: boolean;
 		result = this._parse_proc(this);
 		return result;
+	}
+	public eop(): boolean {
+		return this._parse_end;
 	}
 	// パース処理関数
 	/**
@@ -819,6 +816,8 @@ export class parse_node {
 		this._run_action(curr);
 		// child処理
 		result = this._parse_proc_seq_impl(curr);
+		// EOPで解析終了
+		if (this._parse_end) return result;
 		// next処理
 		if (result) result = this._parse_proc_node(curr);
 		return result;
@@ -837,6 +836,8 @@ export class parse_node {
 			}
 			// 異常発生時
 			if (!result) break;
+			// EOPで解析終了
+			if (this._parse_end) return result;
 		}
 		// 異常発生時
 		if (!result) {
@@ -851,6 +852,8 @@ export class parse_node {
 		this._run_action(curr);
 		// child処理
 		result = this._parse_proc_or_impl(curr);
+		// EOPで解析終了
+		if (this._parse_end) return result;
 		// next処理
 		if (result) result = this._parse_proc_node(curr);
 		return result;
@@ -894,6 +897,8 @@ export class parse_node {
 		// 次ノード処理(check,proc)(elseなし)
 		// 必ずtrueで終了
 		result = this._parse_proc_impl_check_proc(curr._child[0]);
+		// EOPで解析終了
+		if (this._parse_end) return result;
 		// next処理
 		result = this._parse_proc_node(curr);
 		return result;
@@ -904,6 +909,8 @@ export class parse_node {
 		this._run_action(curr);
 		// child処理
 		result = this._parse_proc_many_impl(curr);
+		// EOPで解析終了
+		if (this._parse_end) return result;
 		// next処理
 		if (result) result = this._parse_proc_node(curr);
 		return result;
@@ -924,6 +931,8 @@ export class parse_node {
 					// 次ノード処理(check,proc,else)
 					// とりあえずelseも実施するようにしておくが、manyノードに対してelseを設定する必要性があるか？
 					result = this._parse_proc_impl_check_proc_else(node, curr._else);
+					// EOPで解析終了
+					if (this._parse_end) return result;
 					// 処理失敗時は処理中断
 					if (!result) break;
 				}
@@ -949,7 +958,11 @@ export class parse_node {
 		// child処理
 		// エラーストップはそれぞれのimpl内で実施済み
 		result = this._parse_proc_seq_impl(curr);
+		// EOPで解析終了
+		if (this._parse_end) return result;
 		if (result) result = this._parse_proc_many_impl(curr);
+		// EOPで解析終了
+		if (this._parse_end) return result;
 		// next処理
 		if (result) result = this._parse_proc_node(curr);
 		return result;
@@ -960,6 +973,13 @@ export class parse_node {
 			result = this._parse_proc(node);
 		}
 		return result;
+	}
+	private _parse_proc_eop(curr: parse_node): boolean {
+		// カレントノード実行
+		this._run_action(curr);
+		// EOP設定
+		this._parse_end = true;
+		return true;
 	}
 	/**
 	 * parse実行共通処理
@@ -1228,11 +1248,13 @@ export class parse_node {
 		let result: boolean = true;
 		return result;
 	}
-
-	private _clear_check(): void {
-		this._is_parsed_once = false;
-		this._last_checked_idx = parse_node.LAST_CHECKED_NULL;
+	private _parse_check_eop(next: parse_node): boolean {
+		let result: boolean = false;
+		// 'node'と同じ処理
+		result = this._parse_check_node(next);
+		return result;
 	}
+
 	/**
 	 * 自ノードの状態処理を実施
 	 */
@@ -1260,7 +1282,6 @@ export class parser {
 	private state: parse_state;
 
 	private pn_root: parse_node;
-	private parse_finish: boolean;
 
 	// parser解析ツリーもどき
 	private tree: parse_tree_node;					// 解析ツリーもどきroot
@@ -1295,13 +1316,12 @@ export class parser {
 		this.expr_info_temp = { expr_enable_assign: true, expr_enable_binary: true, expr_enable_cast: true };
 		this.expr_info_stack = [];
 		this.pn_root = new parse_node('null');
-		this.parse_finish = false;
 		this.make_parse_tree();
 	}
 
 	private make_parse_tree() {
 		// node定義
-		let pn_eof: parse_node = new parse_node('EOF', this.ev_eof, this.at_eof);
+		let pn_eof: parse_node = parse_node.eop('EOF', this.ev_eof, this.at_eof);
 		// A.1 Lexical grammar
 		// A.1.3 Identifiers
 		let pn_id: parse_node = new parse_node('identifier', this.ev_identifier, this.at_identifier);
@@ -1409,8 +1429,8 @@ export class parser {
 		pn_root
 			.many(
 				pn.or([
-//					pn_eof,
 					pn_postfix_expr,
+					pn_eof,
 				])
 			);
 
@@ -1424,8 +1444,6 @@ export class parser {
 		this.skip_whitespace();
 		// 状態遷移チェック
 		let result = this.pn_root.parse();
-
-		if (this.parse_finish) result = false;
 
 		return result;
 	}
@@ -1462,7 +1480,7 @@ export class parser {
 		return check_result;
 	}
 	private at_eof = (): void => {
-		this.parse_finish = true;
+		this.push_parse_node('EOF');
 	}
 
 	///////////////////////////////////////
