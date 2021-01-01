@@ -455,24 +455,15 @@ export class parse_node {
 	private _node_type: parse_node_type;
 	private _err_stop: boolean;
 
-	private _is_root: boolean;				// ルートノード(非子ノード)
-	private _is_or: boolean;				// |
-	private _is_many: boolean;				// *
-	private _is_many1: boolean;				// +
-	private _is_opt: boolean;				// ?
-	private _is_else: boolean;				// いずれにもマッチしなかったパターン
 	// パーサテーブル
 	// 構造イメージ：( node.child.child... ).seq( node.child... ).seq( ... )
 	// orで分岐したら合流はしない
-	private _seq: parse_node | null;		// 次ノード
+	private _next: parse_node | null;		// 次ノード
 	private _else: parse_node | null;		// 次ノードのいずれにもマッチしなかった
 	private _child: parse_node[];			// 子ノード
 	// 次ノード解析情報
-	private _prev: parse_node | null;		// 親ノード、ルート要素であればnullになる
 	private _tail: parse_node;				// 
 	// 子ノード解析情報
-	private _parent: parse_node | null;
-	private _parse_idx: number;
 	// 解析一時情報：解析完了で抜けるときにリセットする
 	private _is_parsed_once: boolean;			// 1回でもパースされたかどうか。many1で使用
 	private _last_checked_idx: number;			// ノード遷移チェックで判定OKになったノード情報
@@ -497,23 +488,13 @@ export class parse_node {
 		this._action_post = null;
 		this._node_type = 'node';
 		this._err_stop = false;
-	
-		this._is_root = false;
-		this._is_or = false;
-		this._is_many = false;
-		this._is_many1 = false;
-		this._is_opt = false;
-		this._is_else = false;
 		// 
-		this._seq = null;
+		this._next = null;
 		this._else = null;
 		this._child = [];
 		//
-		this._prev = null;
 		this._tail = this;
 		//
-		this._parent = null;
-		this._parse_idx = 0;
 		//
 		this._is_parsed_once = false;
 		this._last_checked_idx = parse_node.LAST_CHECKED_NULL;
@@ -613,11 +594,11 @@ export class parse_node {
 		// seqノードを作成
 		let new_node = parse_node.seq(nodes);
 		// ノード登録
-		this._seq_push(new_node);
+		this._next_push(new_node);
 	}
-	private _seq_push(node: parse_node): void {
+	private _next_push(node: parse_node): void {
 		// tailに追加
-		this._tail._seq = node;
+		this._tail._next = node;
 		// tail更新
 		this._tail = node;
 	}
@@ -632,7 +613,7 @@ export class parse_node {
 		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
 		let new_node = parse_node.opt(node);
 		// ノード登録
-		this._seq_push(new_node);
+		this._next_push(new_node);
 		return this;
 	}
 	static opt(node: parse_node): parse_node {
@@ -652,7 +633,7 @@ export class parse_node {
 		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
 		let node = parse_node.or(child);
 		// ノード登録
-		this._seq_push(node);
+		this._next_push(node);
 		return this;
 	}
 	static or(nodes: parse_node[]): parse_node {
@@ -682,7 +663,7 @@ export class parse_node {
 		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
 		let node = parse_node.many(child);
 		// ノード登録
-		this._seq_push(node);
+		this._next_push(node);
 		return this;
 	}
 	static many(node: parse_node): parse_node {
@@ -701,7 +682,7 @@ export class parse_node {
 		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
 		let node = parse_node.many1(child);
 		// ノード登録
-		this._seq_push(node);
+		this._next_push(node);
 		return this;
 	}
 	static many1(node: parse_node): parse_node {
@@ -787,7 +768,7 @@ export class parse_node {
 	private _parse_proc(curr: parse_node): boolean {
 		let result: boolean;
 		// ノードタイプに応じた処理を実施
-		result = this._parse_proc_tbl[curr._node_type](curr);
+		result = this._parse_proc_tbl[curr._node_type].call(this,curr);
 		return result;
 	}
 	/**
@@ -803,14 +784,14 @@ export class parse_node {
 	private _parse_proc_node(curr: parse_node): boolean {
 		let result: boolean = false;
 		// カレントノード実行
-		curr._run_action();
+		this._run_action(curr);
 		// 状態遷移チェック
-		if (curr._seq == null) {
+		if (curr._next == null) {
 			// 末尾ノードであれば正常終了
 			result = true;
 		} else {
 			// 次ノード処理(check,proc,else)
-			result = this._parse_proc_impl_check_proc_else(curr._seq, curr._else);
+			result = this._parse_proc_impl_check_proc_else(curr._next, curr._else);
 			// NGありのとき
 			if (!result) {
 				// エラーストップノードであれば次の処理からパース再開
@@ -835,9 +816,11 @@ export class parse_node {
 	private _parse_proc_seq(curr: parse_node): boolean {
 		let result: boolean = true;
 		// カレントノード実行
-		curr._run_action();
-		// 実行
+		this._run_action(curr);
+		// child処理
 		result = this._parse_proc_seq_impl(curr);
+		// next処理
+		if (result) result = this._parse_proc_node(curr);
 		return result;
 	}
 	private _parse_proc_seq_impl(curr: parse_node): boolean {
@@ -865,7 +848,15 @@ export class parse_node {
 	private _parse_proc_or(curr: parse_node): boolean {
 		let result: boolean = false;
 		// カレントノード実行
-		curr._run_action();
+		this._run_action(curr);
+		// child処理
+		result = this._parse_proc_or_impl(curr);
+		// next処理
+		if (result) result = this._parse_proc_node(curr);
+		return result;
+	}
+	private _parse_proc_or_impl(curr: parse_node): boolean {
+		let result: boolean = false;
 		// 状態遷移チェック
 		let node_ptr: parse_node | null = null;
 		for (let node of curr._child) {
@@ -897,20 +888,24 @@ export class parse_node {
 	private _parse_proc_opt(curr: parse_node): boolean {
 		let result: boolean = true;
 		// カレントノード実行
-		curr._run_action();
+		this._run_action(curr);
 		// (failsafe)child要素チェック, optは必ず1つchildを持っている
 		if (curr._child.length == 0) throw new Error("ParseTree:InvalidConstructionDetect:opt node has one node.");
 		// 次ノード処理(check,proc)(elseなし)
-		result = this._parse_proc_impl_check_proc(curr._child[0]);
 		// 必ずtrueで終了
-		return true;
+		result = this._parse_proc_impl_check_proc(curr._child[0]);
+		// next処理
+		result = this._parse_proc_node(curr);
+		return result;
 	}
 	private _parse_proc_many(curr: parse_node): boolean {
 		let result: boolean = false;
 		// カレントノード実行
-		curr._run_action();
-		// 実行
+		this._run_action(curr);
+		// child処理
 		result = this._parse_proc_many_impl(curr);
+		// next処理
+		if (result) result = this._parse_proc_node(curr);
 		return result;
 	}
 	private _parse_proc_many_impl(curr: parse_node): boolean {
@@ -950,11 +945,13 @@ export class parse_node {
 	private _parse_proc_many1(curr: parse_node): boolean {
 		let result: boolean = false;
 		// カレントノード実行
-		curr._run_action();
-		// 実行
+		this._run_action(curr);
+		// child処理
 		// エラーストップはそれぞれのimpl内で実施済み
 		result = this._parse_proc_seq_impl(curr);
 		if (result) result = this._parse_proc_many_impl(curr);
+		// next処理
+		if (result) result = this._parse_proc_node(curr);
 		return result;
 	}
 	private _parse_proc_else(node: parse_node|null): boolean {
@@ -978,8 +975,27 @@ export class parse_node {
 			result = this._parse_proc(node);
 		} else {
 			// 遷移NG
-			// else処理を実施
-			result = this._parse_proc_else(else_node);
+			// スキップできるノードのチェック
+			switch (node._node_type) {
+				case 'many':
+				case 'opt':
+					if (node._next == null) {
+						result = true;
+					} else {
+						result = this._parse_proc_impl_check_proc_else(node._next, node._else);
+						// NGありのとき
+						if (!result) {
+							// エラーストップノードであれば次の処理からパース再開
+							if (node._err_stop) result = true;
+						}
+					}
+					break;
+
+				default:
+					// else処理を実施
+					result = this._parse_proc_else(else_node);
+					break;
+			}
 		}
 		return result;
 	}
@@ -1010,7 +1026,7 @@ export class parse_node {
 	private _parse_check(next: parse_node): boolean {
 		let result: boolean;
 		// ノードタイプに応じた処理を実施
-		result = this._parse_check_tbl[next._node_type](next);
+		result = this._parse_check_tbl[next._node_type].call(this,next);
 		return result;
 	}
 	/**
@@ -1049,9 +1065,9 @@ export class parse_node {
 		// 状態遷移チェック結果ログを最初に初期化しておく
 		this._last_checked_idx = parse_node.LAST_CHECKED_NULL;
 		// 自ノードcheck判定
-		if (next._seq != null) {
+		if (next._next != null) {
 			// checkが登録されていたら実施
-			check_result = this._parse_check(next._seq);
+			check_result = this._parse_check(next._next);
 			if (check_result) {
 				// 判定OK
 				result = 'check_ok';
@@ -1084,6 +1100,8 @@ export class parse_node {
 				result = 'check_ok';
 				// 状態遷移チェック結果ログ更新
 				this._last_checked_idx = child_idx;
+				// 1つでも判定OKが見つかったら終了する
+				break;
 			} else {
 				// 判定NG
 				result = 'check_ng';
@@ -1133,6 +1151,8 @@ export class parse_node {
 		check_result = this._parse_check_impl_check(next);
 		// 未確定ならchild判定
 		if (check_result == 'check_undef') check_result = this._parse_check_impl_child_head(next);
+		// 未確定ならseq判定
+		if (check_result == 'check_undef') check_result = this._parse_check_impl_seq(next);
 		// check結果処理
 		switch (check_result) {
 		case 'check_ok':
@@ -1168,6 +1188,8 @@ export class parse_node {
 		check_result = this._parse_check_impl_check(next);
 		// 未確定ならchild判定
 		if (check_result == 'check_undef') check_result = this._parse_check_impl_child_all(next);
+		// 未確定ならseq判定
+		if (check_result == 'check_undef') check_result = this._parse_check_impl_seq(next);
 		// check結果処理
 		switch (check_result) {
 			case 'check_ok':
@@ -1207,265 +1229,6 @@ export class parse_node {
 		return result;
 	}
 
-	private _parse_old(curr: parse_node): boolean {
-		let result: boolean = false;
-		// カレントノード実行
-		curr._run_action();
-		// child実行
-		result = this._parse_child(curr);
-		if (!result) {
-			// 処理終了時に各種フラグをクリア
-			curr._clear_check();
-			// parse 失敗でroot定義されたノードまで戻る
-			return false;
-		}
-		// seq実行
-		result = this._parse_seq_old(curr);
-		if (!result) {
-			// 処理終了時に各種フラグをクリア
-			curr._clear_check();
-			// parse 失敗でroot定義されたノードまで戻る
-			return false;
-		}
-		// ノード後処理実行
-		this._run_action_post();
-		return result;
-	}
-	/**
-	 * カレントノードに対して、childノードパース実行
-	 * @param curr 
-	 * @retval true 	parse success:解析正常終了、childなし、opt/manyノードのchild先頭check NG  
-	 * @retval false	parse failed:opt/many以外のchild先頭check NG、child途中のcheck NG
-	 */
-	private _parse_child(curr: parse_node): boolean {
-		let result: boolean;
-		if (curr._child.length > 0) {
-			// childが存在するとき
-			result = false;
-			// many/many1ノードであればマッチする限り繰り返す
-			let many: boolean = false;
-			if (curr._is_many || curr._is_many1) many = true;
-			// 順番にチェック＋実行, チェックはchildノードに任せる
-			let node_idx: number;
-			let child_check: boolean;
-			let parsed_once: boolean = false;
-			do {
-				node_idx = 0;
-				for (let node of curr._child) {
-					// チェック
-					child_check = node._run_check();
-					if (child_check) {
-						// チェックOK
-						// 該当ノードのparse実行
-						result = this._parse_proc(node);
-					} else {
-						// チェックNG
-						// parse失敗のときelse判定
-						result = this._parse_else_old(node);
-						if (result) {
-							// elseで成功のとき
-						} else {
-							if (node_idx == 0) {
-								// 先頭ノードの場合
-								if (curr._is_opt || curr._is_many || (curr._is_many1 && curr._is_parsed_once)) {
-									// opt/many/many1であればtrueで次の状態へ
-									result = true;
-									many = false;
-									break;
-								} else {
-									// チェックNG
-									result = false;
-									many = false;
-									break;
-								}
-							} else {
-								// 2つ目以降のノードの場合
-								// チェックNG
-								result = false;
-								many = false;
-								break;
-							}
-						}
-					}
-					// 解析失敗時はroot要素まで返る。root要素であればその次から処理を再開する。
-					if (!result) {
-						// childがrootノードであれば処理継続
-						if (node._is_root) {
-							result = true;
-						}
-					}
-					node_idx++;
-				}
-				// 解析失敗時はroot要素まで返る。root要素であればその次から処理を再開する。
-				if (!result) {
-					// cuurがrootノードであれば処理継続
-					if (curr._is_root) {
-						result = true;
-					}
-				}
-				// 1回実施完了したのでmany1用にフラグを立てる
-				parsed_once = true;
-			} while (many);
-		} else {
-			// child emptyは正常終了
-			result = true;
-		}
-		return result;
-	}
-	/**
-	 * 
-	 * @param curr 
-	 */
-	private _parse_seq_old(curr: parse_node): boolean {
-		let result: boolean;
-		if (curr._seq.length > 0) {
-			// 遷移先チェック
-			let seq_idx = curr._run_check_seq();
-			if (seq_idx >= parse_node.LAST_CHECKED_CHILD) {
-				result = this._parse_proc( curr._seq[seq_idx] );
-			} else {
-				result = false;
-			}
-		} else {
-			// seq emptyは正常終了
-			result = true;
-		}
-		// parse失敗のときelse判定
-		if (!result) {
-			result = this._parse_else_old(curr);
-		}
-		// 解析失敗時はroot要素まで返る。root要素であればその次から処理を再開する。
-		if (!result) {
-			// cuurがrootノードであれば処理継続
-			if (curr._is_root) {
-				result = true;
-			}
-		}
-		return result;
-	}
-	private _parse_else_old(curr: parse_node): boolean {
-		let result: boolean = false;
-		if (curr._else != null) {
-			result = this._parse_proc(curr._else);
-		}
-		return result;
-	}
-	/**
-	 * 自ノードの状態遷移チェックを実施
-	 */
-	private _run_check(): boolean {
-		let result: boolean;
-		// 自ノードについて状態遷移チェックを実施開始
-		// 状態遷移チェック結果ログを最初に初期化しておく
-		this._last_checked_idx = parse_node.LAST_CHECKED_NULL;
-		// 自ノードcheck判定
-		if (this._check != null) {
-			// checkが登録されていたら実施
-			result = this._check();
-			if (result) this._last_checked_idx = parse_node.LAST_CHECKED_SELF;
-		} else {
-			// checkが登録されていなかったら、child/seqの判定を実施
-			// child判定
-			let child_result = this._run_check_child();
-			switch (child_result) {
-				case 'check_ok':
-					this._last_checked_idx = parse_node.LAST_CHECKED_SEQ;
-					result = true;
-					break;
-				case 'check_undef':
-					// seq判定を実施
-					let result_idx = this._run_check_seq();
-					if (result_idx != parse_node.LAST_CHECKED_NULL) {
-						result = true;
-					} else {
-						result = false;
-					}
-					break;
-				case 'check_ng':
-				default:
-					result = false;
-					break;
-			}
-		}
-
-		return result;
-	}
-	/**
-	 * childノードの状態遷移チェックを実施
-	 */
-	private _run_check_child(): parse_check_result {
-		let result: parse_check_result;
-		// childノードcheck判定
-		if (this._child.length > 0) {
-			// childノードが存在するとき
-			// 順にcheck判定実施, opt/many/many1向け処置, それ以外は先頭ノードの判定で抜ける
-			let child_result: boolean;
-			result = 'check_ng';
-			for (let node of this._child) {
-				// 該当ノードのcheck判定
-				child_result = node._run_check();
-				if (child_result) {
-					// check success でチェック終了
-					result = 'check_ok';
-					break;
-				} else {
-					// check failed ならopt/many/many1チェック
-					if (this._is_opt || this._is_many) {
-						// opt/manyは判定不可, 次のノード判定へ
-						// 末尾ノードなら 'check_undef' がセットされて処理終了する
-						result = 'check_undef';
-					} else if (this._is_many1) {
-						// many1は通過済みか判定する
-						// 通過済み判定は_parse内で実施。
-						// 処理を抜けるときに通過済み判定はクリアする。
-						// 自分自身のmany1処理にて有効な判定となる想定。
-						if (this._is_parsed_once) {
-							// 通過済みは判定不可, 次のノード判定へ
-							// 末尾ノードなら 'check_undef' がセットされて処理終了する
-							result = 'check_undef';
-						} else {
-							// childノードが存在するのにcheckが失敗する場合は遷移NG
-							result = 'check_ng';
-							break;
-						}
-					} else {
-						// 通常ノードのとき
-						// childノードが存在するのにcheckが失敗する場合は遷移NG
-						result = 'check_ng';
-						break;
-					}
-				}
-			}
-		} else {
-			// childノードなしは判定不可
-			result = 'check_undef';
-		}
-		return result;
-	}
-	private _run_check_seq(): number {
-		let result: number;
-		// seq判定
-		if (this._seq.length > 0) {
-			// seqノードが存在するとき
-			result = parse_node.LAST_CHECKED_NULL;
-			// seqをすべてチェック, いずれかが一致すればOK
-			let idx: number;
-			for (idx=0; idx<this._seq.length; idx++) {
-				// seqチェック
-				let seq_result = this._seq[idx]._run_check();
-				if (seq_result) {
-					this._last_checked_idx = idx;
-					result = idx;
-					break;
-				}
-			}
-		} else {
-			// seqノードなしはNG
-			result = parse_node.LAST_CHECKED_NULL;
-		}
-
-		return result;
-	}
 	private _clear_check(): void {
 		this._is_parsed_once = false;
 		this._last_checked_idx = parse_node.LAST_CHECKED_NULL;
@@ -1473,13 +1236,15 @@ export class parse_node {
 	/**
 	 * 自ノードの状態処理を実施
 	 */
-	private _run_action(): void {
+	private _run_action = (curr: parse_node): void => {
 		// nullのときは何もせず終了
-		if (this._action != null) {
-			this._action();
+		if (curr._action != null) {
+			curr._action();
+			// 共通後処理を実行
+			this._run_action_post();
 		}
 	}
-	private _run_action_post(): void {
+	private _run_action_post = (): void => {
 		// nullのときは何もせず終了
 		if (this._action_post != null) {
 			this._action_post();
@@ -1495,6 +1260,8 @@ export class parser {
 	private state: parse_state;
 
 	private pn_root: parse_node;
+	private parse_finish: boolean;
+
 	// parser解析ツリーもどき
 	private tree: parse_tree_node;					// 解析ツリーもどきroot
 	private token_stack: lex_info[];				// LookAheda用のLexerTokenスタック
@@ -1528,30 +1295,32 @@ export class parser {
 		this.expr_info_temp = { expr_enable_assign: true, expr_enable_binary: true, expr_enable_cast: true };
 		this.expr_info_stack = [];
 		this.pn_root = new parse_node('null');
+		this.parse_finish = false;
 		this.make_parse_tree();
 	}
 
 	private make_parse_tree() {
 		// node定義
+		let pn_eof: parse_node = new parse_node('EOF', this.ev_eof, this.at_eof);
 		// A.1 Lexical grammar
 		// A.1.3 Identifiers
-		let pn_id: parse_node = new parse_node('identifier', this.ev_identifier, this.at_identifier);		// 
+		let pn_id: parse_node = new parse_node('identifier', this.ev_identifier, this.at_identifier);
 		// A.1.5 Constants
-		let pn_const: parse_node = new parse_node('constant', this.ev_constant, this.at_constant);		// 
+		let pn_const: parse_node = new parse_node('constant', this.ev_constant, this.at_constant);
 		// A.1.6 String literals
-		let pn_str_lit: parse_node = new parse_node('string-literal', this.ev_str_lit, this.at_str_lit);		// 
+		let pn_str_lit: parse_node = new parse_node('string-literal', this.ev_str_lit, this.at_str_lit);
 		// A.1.7 Punctuators
-		let pn_lbracket: parse_node = new parse_node('left-bracket', this.ev_lbracket, this.at_lbracket);		// 
-		let pn_rbracket: parse_node = new parse_node('right-bracket', this.ev_rbracket, this.at_rbracket);		// 
-		let pn_lparen: parse_node = new parse_node('left-paren', this.ev_lparen, this.at_lparen);		// 
-		let pn_rparen: parse_node = new parse_node('right-paren', this.ev_rparen, this.at_rparen);		// 
-		let pn_lbrace: parse_node = new parse_node('left-brace', this.ev_lbrace, this.at_lbrace);		// 
-		let pn_rbrace: parse_node = new parse_node('right-brace', this.ev_rbrace, this.at_rbrace);		// 
-		let pn_dot: parse_node = new parse_node('dot', this.ev_dot, this.at_dot);		// 
-		let pn_arrow: parse_node = new parse_node('arrow-operator', this.ev_arrow_op, this.at_arrow_op);		// 
-		let pn_incr: parse_node = new parse_node('increment-operator', this.ev_incr_op, this.at_incr_op);		// 
-		let pn_decl: parse_node = new parse_node('decrement-operator', this.ev_decl_op, this.at_decl_op);		// 
-		let pn_comma: parse_node = new parse_node('comma', this.ev_comma, this.at_comma);		// 
+		let pn_lbracket: parse_node = new parse_node('left-bracket', this.ev_lbracket, this.at_lbracket);
+		let pn_rbracket: parse_node = new parse_node('right-bracket', this.ev_rbracket, this.at_rbracket);
+		let pn_lparen: parse_node = new parse_node('left-paren', this.ev_lparen, this.at_lparen);
+		let pn_rparen: parse_node = new parse_node('right-paren', this.ev_rparen, this.at_rparen);
+		let pn_lbrace: parse_node = new parse_node('left-brace', this.ev_lbrace, this.at_lbrace);
+		let pn_rbrace: parse_node = new parse_node('right-brace', this.ev_rbrace, this.at_rbrace);
+		let pn_dot: parse_node = new parse_node('dot', this.ev_dot, this.at_dot);
+		let pn_arrow: parse_node = new parse_node('arrow-operator', this.ev_arrow_op, this.at_arrow_op);
+		let pn_incr: parse_node = new parse_node('increment-operator', this.ev_incr_op, this.at_incr_op);
+		let pn_decl: parse_node = new parse_node('decrement-operator', this.ev_decl_op, this.at_decl_op);
+		let pn_comma: parse_node = new parse_node('comma', this.ev_comma, this.at_comma);
 		// A.2.1 Expressions
 		// (6.5.1) primary-expression:
 		let pn_primary_expr: parse_node;
@@ -1609,7 +1378,7 @@ export class parser {
 			]);
 		pn_postfix_expr = pn.node('postfix-expression')
 			.or([
-				pn.seq([pn_primary_expr]).many1(pn_postfix_expr_1),
+				pn.seq([pn_primary_expr]).many(pn_postfix_expr_1),
 				pn_postfix_expr_2
 			]);
 		// (6.5.2) argument-expression-list:
@@ -1630,13 +1399,22 @@ export class parser {
 		let pn_trans_unit: parse_node = pn.node('translation-unit').many(pn_extern_decl);
 		// ルート要素定義
 		// prepro-directive or translation-unit の解析を実施
+		/*
 		pn_root.action_post(this.at_post)
 			.or([
 				pn_prepro,
 				pn_trans_unit
 			]);
+		*/
+		pn_root
+			.many(
+				pn.or([
+//					pn_eof,
+					pn_postfix_expr,
+				])
+			);
 
-		this.pn_root = pn_expr;
+		this.pn_root = pn_root;
 		this.pn_root.action_post(this.at_post);
 	}
 
@@ -1646,6 +1424,8 @@ export class parser {
 		this.skip_whitespace();
 		// 状態遷移チェック
 		let result = this.pn_root.parse();
+
+		if (this.parse_finish) result = false;
 
 		return result;
 	}
@@ -1664,6 +1444,25 @@ export class parser {
 	private at_post = (): void => {
 		// 空白を事前にスキップ
 		this.skip_whitespace();
+	}
+
+	/**
+	 * EOF
+	 */
+	private ev_eof = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'EOF':
+				check_result = true;
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	private at_eof = (): void => {
+		this.parse_finish = true;
 	}
 
 	///////////////////////////////////////

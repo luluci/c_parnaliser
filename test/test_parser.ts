@@ -144,9 +144,12 @@ function parser_test(file_path: string) {
 	console.time('parser: parse time:');
 	// 解析
 	let tree: parse_tree_node;
+	/*
 	while (parse.exec()) {
 		tree = parse.parse_tree;
-	}
+	}*/
+	parse.exec()
+	tree = parse.parse_tree;
 	console.timeEnd('parser: parse time:');
 //	console.timeEnd('parser: whole time:');
 	parser_tree_dump(parse.parse_tree, fd);
