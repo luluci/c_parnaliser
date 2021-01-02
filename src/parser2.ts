@@ -22,6 +22,44 @@ type parse_state =
 	| 'declaration-specifiers'
 
 	// A.1 Lexical grammar
+	// A.1.2 Keywords
+	| 'auto'
+	| 'break'
+	| 'case'
+	| 'char'
+	| 'const'
+	| 'continue'
+	| 'default'
+	| 'do'
+	| 'double'
+	| 'else'
+	| 'enum'
+	| 'extern'
+	| 'float'
+	| 'for'
+	| 'goto'
+	| 'if'
+	| 'inline'
+	| 'int'
+	| 'long'
+	| 'register'
+	| 'restrict'
+	| 'return'
+	| 'short'
+	| 'signed'
+	| 'sizeof'
+	| 'static'
+	| 'struct'
+	| 'switch'
+	| 'typedef'
+	| 'union'
+	| 'unsigned'
+	| 'void'
+	| 'volatile'
+	| 'while'
+	| '_Bool'
+	| '_Complex'
+	| '_Imaginary'
 	// A.1.3 Identifiers
 	| 'identifier'
 	// A.1.5 Constants
@@ -39,7 +77,50 @@ type parse_state =
 	| 'arrow-operator'
 	| 'increment-operator'
 	| 'decrement-operator'
-	| 'comma'
+	| 'ampersand'					// &	address_operator | bitwise_AND_operator
+	| 'asterisk'					// *	asterisk_punctuator | indirection_operator | multimlication_operator
+	| 'plus'						// +
+	| 'minus'						// -
+	| 'bitwise_complement_op'		// ~
+	| 'logical_negation_op'			// !
+	| 'div_op'						// /
+	| 'remain_op'					// %
+	| 'left_shift_op'				// <<
+	| 'right_shift_op'				// >>
+	| 'lt_op'						// <
+	| 'gt_op'						// >
+	| 'lte_op'						// <=
+	| 'gte_op'						// >=
+	| 'equal_op'					// ==
+	| 'inequal_op'					// !=
+	| 'bitwise_EXOR_op'				// ^
+	| 'bitwise_OR_op'				// |
+	| 'logical_AND_op'				// &&
+	| 'logical_OR_op'				// ||
+	| 'conditional_op'				// ?
+	| 'colon'						// :
+	| 'semicolon'					// ;
+	| 'ellipsis'					// ...
+	| 'simple_assign_op'			// =
+	| 'mul_assign_op'				// *=
+	| 'div_assign_op'				// /=
+	| 'remain_assign_op'			// %=
+	| 'add_assign_op'				// +=
+	| 'sub_assign_op'				// -=
+	| 'left_shift_assign_op'		// <<=
+	| 'right_shift_assign_op'		// >>=
+	| 'bitwise_AND_assign_op'		// &=
+	| 'bitwise_EXOR_assign_op'		// ^=
+	| 'bitwise_OR_assign_op'		// |=
+	| 'comma'						// ,
+	| 'sharp'						// #
+	| 'sharp_sharp'					// ##
+	| 'alt_left_bracket'			// <:	== [
+	| 'alt_right_bracket'			// :>	== ]
+	| 'alt_left_brace'				// <%	== {
+	| 'alt_right_brace'				// %>	== }
+	| 'alt_sharp'					// %:	== #
+	| 'alt_sharp_sharp_op'			// %:%:	== ##
 	// A.2 Phrase structure grammar
 	// A.2.1 Expressions
 	// (6.5.1) primary-expression:
@@ -49,9 +130,15 @@ type parse_state =
 	| 'postfix-expression'
 	| 'postfix-expression_1'
 	| 'postfix-expression_2'
-	| 'postfix-expression_error'
+	| 'postfix-expression_1_error'
 	// (6.5.2) argument-expression-list:
 	| 'argument-expression-list'
+	// (6.5.3) unary-expression:
+	| 'unary-expression'					// unary-expression
+	// (6.5.3) unary-operator: one of
+	| 'unary-operator'						// unary-operator
+	// (6.5.16) assignment-expression:
+	| 'assignment-expression'				// assignment-expression
 	// A.2.2 Declarations
 	// (6.7.6) type-name:
 	| 'type-name'
@@ -67,12 +154,9 @@ type parse_state =
 
 	// Expressions
 	| 'cast-expression'
-	| 'unary-expression'				// unary-expression
-	| 'sizeof'
 	| 'conditional-expression'			// conditional-expression
 	| 'expression'						// expression
 	| 'constant-expression'				// constant-expression
-	| 'assignment-expression'			// assignment-expression
 	// Declarations
 	| 'declaration'
 	| 'declaration_dont_declare'
@@ -427,6 +511,8 @@ export class parser {
 		// node定義
 		let pn_eof = pn.eop('EOF', this.ev_eof, this.at_eof);
 		// A.1 Lexical grammar
+		// A.1.2 Keywords
+		let pn_sizeof = pn.node('sizeof', this.ev_sizeof, this.at_sizeof);
 		// A.1.3 Identifiers
 		let pn_id = pn.node('identifier', this.ev_identifier, this.at_identifier);
 		// A.1.5 Constants
@@ -444,22 +530,40 @@ export class parser {
 		let pn_arrow = pn.node('arrow-operator', this.ev_arrow_op, this.at_arrow_op);
 		let pn_incr = pn.node('increment-operator', this.ev_incr_op, this.at_incr_op);
 		let pn_decl = pn.node('decrement-operator', this.ev_decl_op, this.at_decl_op);
+		let pn_amp = pn.node('ampersand', this.ev_amp, this.at_amp);
+		let pn_aster = pn.node('asterisk', this.ev_aster, this.at_aster);
+		let pn_plus = pn.node('plus', this.ev_plus, this.at_plus);
+		let pn_minus = pn.node('minus', this.ev_minus, this.at_minus);
+		let pn_bitw_cmpl_op = pn.node('bitwise_complement_op', this.ev_bitw_cmpl_op, this.at_bitw_cmpl_op);
+		let pn_logic_nega_op = pn.node('logical_negation_op', this.ev_logic_nega_op, this.at_logic_nega_op);
+		let pn_semicolon = pn.node('semicolon', this.ev_semicolon, this.at_semicolon);
 		let pn_comma = pn.node('comma', this.ev_comma, this.at_comma);
 		// A.2.1 Expressions
 		// (6.5.1) primary-expression:
 		let pn_primary_expr: parse_node;
+		let pn_primary_expr_else: parse_node;
 		// (6.5.2) postfix-expression:
 		let pn_postfix_expr_1: parse_node;
+		let pn_postfix_expr_1_else: parse_node;
 		let pn_postfix_expr_2: parse_node;
 		let pn_postfix_expr: parse_node;
 		// (6.5.2) argument-expression-list:
+		let pn_arg_expr_list = pn.node('argument-expression-list');
+		// (6.5.3) unary-expression:
+		let pn_unary_expr = pn.node('unary-expression');
+		// (6.5.3) unary-operator: one of
+		let pn_unary_ope = pn.node('unary-operator');
+		// (6.5.4) cast-expression:
+		let pn_cast_expr = pn.node('cast-expression');
+		// (6.5.16) assignment-expression:
+		let pn_assign_expr = pn.node('assignment-expression');
 		// (6.5.17) expression:
 		let pn_expr: parse_node;
 		// A.2.2 Declarations
 		// (6.7.6) type-name:
-		let pn_typename = pn.node('type-name', this.ev_null, this.at_null);
+		let pn_typename = pn.node('type-name');
 		// (6.7.8) initializer-list:
-		let pn_init_list = pn.node('initializer-list', this.ev_null, this.at_null);
+		let pn_init_list = pn.node('initializer-list');
 	
 		let pn_root = pn.node('root', this.ev_null, this.at_null);
 		let pn_prepro = pn.node('pp-directive', this.ev_pp, this.at_null);				// preprocessing-directive
@@ -467,7 +571,6 @@ export class parser {
 		let pn_decl_spec = pn.node('declaration-specifiers', this.ev_decl_spec, this.at_null);		// declaration-specifiers
 		let pn_init_decl_list = pn.node('statement', this.ev_null, this.at_null);		// init-declarator-list
 		let pn_declarator = pn.node('statement', this.ev_null, this.at_null);			// declarator
-		let pn_arg_expr_list = pn.node('argument-expression-list', this.ev_null, this.at_null);				//
 		let pn_decl_list = pn.node('statement', this.ev_null, this.at_null);				// declaration-list
 		let pn_compound_state = pn.node('statement', this.ev_null, this.at_null);		// compound-statement
 
@@ -475,36 +578,66 @@ export class parser {
 		// A.2.1 Expressions
 		pn_expr = pn.root('expression', this.ev_null, this.at_null);
 		// (6.5.1) primary-expression:
+		pn_primary_expr_else = pn.else('primary-expression_error', this.at_com_err_not_stop);
 		pn_primary_expr = pn.node('primary-expression')
 			.or([
 				pn_id,
 				pn_const,
 				pn_str_lit,
-				pn.seq([pn_lparen, pn_expr, pn_rparen]).else('primary-expression_error', this.at_com_err_not_stop),
-				pn.else('primary-expression_error', this.at_null)
+				pn.seq([pn_lparen, pn_expr, pn_rparen]).else(pn_primary_expr_else),
 			]);
 		// (6.5.2) postfix-expression:
+		pn_postfix_expr_1_else = pn.else('postfix-expression_1_error', this.at_com_err_not_stop);
 		pn_postfix_expr_1 = pn.node('postfix-expression_1')
 			.or([
-				pn.seq([pn_lbracket, pn_expr, pn_rbracket]).else('primary-expression_error', this.at_com_err_not_stop),
-				pn_lparen.opt(pn_arg_expr_list).seq([pn_rbracket]),
-				pn_dot.seq([pn_id]),
-				pn_arrow.seq([pn_id]),
+				pn.seq([pn_lbracket, pn_expr, pn_rbracket]).else(pn_postfix_expr_1_else),
+				pn_lparen.opt(pn_arg_expr_list).seq([pn_rbracket]).else(pn_postfix_expr_1_else),
+				pn_dot.seq([pn_id]).else(pn_postfix_expr_1_else),
+				pn_arrow.seq([pn_id]).else(pn_postfix_expr_1_else),
 				pn_incr,
 				pn_decl,
-				pn.else('postfix-expression_error', this.at_null)
 			]);
 		pn_postfix_expr_2 = pn.node('postfix-expression_2')
 			.or([
 				pn.seq([pn_lparen, pn_typename, pn_rparen, pn_lbrace, pn_init_list]).opt(pn_comma).seq([pn_rbrace]),
-				pn.else('postfix-expression_error', this.at_null)
 			]);
 		pn_postfix_expr = pn.node('postfix-expression')
 			.or([
 				pn.seq([pn_primary_expr]).many(pn_postfix_expr_1),
-				pn_postfix_expr_2
+//				pn.seq([pn_primary_expr, pn.many(pn_postfix_expr_1)]),	// ↑どっちでも同じ
+//				pn_postfix_expr_2	// cast-exprと構文の競合があるので、cast-expr内で処理する。
 			]);
 		// (6.5.2) argument-expression-list:
+		pn_arg_expr_list.seq([
+			pn_assign_expr, pn.many(pn.seq([pn_comma, pn_assign_expr]))
+		]);
+		// (6.5.3) unary-expression:
+		pn_unary_expr.or([
+			pn_postfix_expr,
+			pn.seq([pn_incr, pn_unary_expr]),
+			pn.seq([pn_decl, pn_unary_expr]),
+			pn.seq([pn_unary_ope, pn_cast_expr]),
+			pn.seq([pn_sizeof]),
+		]);
+		// (6.5.3) unary-operator: one of
+		pn_unary_ope.or([
+			pn_amp,
+			pn_aster,
+			pn_plus,
+			pn_minus,
+			pn_bitw_cmpl_op,
+			pn_logic_nega_op,
+		]);
+		// (6.5.4) cast-expression:
+		// 「( type-name )」の後には、cast-expr か postfix-exprのinit-list が出現する可能性がある。
+		// grammarの節を越えて競合がある点に注意。
+		pn_cast_expr.or([
+			pn_unary_expr,
+			pn.seq([pn_lparen, pn_typename, pn_rparen]).or([
+				pn.seq([pn_lbrace, pn_init_list]).opt(pn_comma).seq([pn_rbrace]),
+				pn_cast_expr,
+			]),
+		])
 		// (6.5.17) expression:
 		pn_expr.many(pn_postfix_expr);
 		// A.2.2 Declarations
@@ -532,7 +665,7 @@ export class parser {
 		pn_root
 			.many(
 				pn.or([
-					pn_postfix_expr,
+					pn.seq([pn_cast_expr, pn_semicolon]),
 					pn_eof,
 				])
 			);
@@ -589,6 +722,30 @@ export class parser {
 	///////////////////////////////////////
 	// A.1 Lexical grammar
 	///////////////////////////////////////
+	/**
+	 * event:
+	 * sizeof 状態遷移判定
+	 */
+	private ev_sizeof = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'sizeof':
+				check_result = true;
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * sizeof 状態処理
+	 */
+	private at_sizeof = (): void => {
+		this.push_parse_node('sizeof');
+	}
+
 	/**
 	 * event:
 	 * identifier 状態遷移判定
@@ -904,6 +1061,174 @@ export class parser {
 	 */
 	private at_decl_op = (): void => {
 		this.push_parse_node('decrement-operator');
+	}
+
+	/**
+	 * event:
+	 * ampersand 状態遷移判定
+	 */
+	private ev_amp = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'ampersand':
+				check_result = true;
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * ampersand 状態処理
+	 */
+	private at_amp = (): void => {
+		this.push_parse_node('ampersand');
+	}
+
+	/**
+	 * event:
+	 * asterisk 状態遷移判定
+	 */
+	private ev_aster = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'asterisk':
+				check_result = true;
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * asterisk 状態処理
+	 */
+	private at_aster = (): void => {
+		this.push_parse_node('asterisk');
+	}
+
+	/**
+	 * event:
+	 * plus 状態遷移判定
+	 */
+	private ev_plus = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'plus':
+				check_result = true;
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * plus 状態処理
+	 */
+	private at_plus = (): void => {
+		this.push_parse_node('plus');
+	}
+
+	/**
+	 * event:
+	 * minus 状態遷移判定
+	 */
+	private ev_minus = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'minus':
+				check_result = true;
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * minus 状態処理
+	 */
+	private at_minus = (): void => {
+		this.push_parse_node('minus');
+	}
+
+	/**
+	 * event:
+	 * bitwise_complement_op 状態遷移判定
+	 */
+	private ev_bitw_cmpl_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'bitwise_complement_op':
+				check_result = true;
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * bitwise_complement_op 状態処理
+	 */
+	private at_bitw_cmpl_op = (): void => {
+		this.push_parse_node('bitwise_complement_op');
+	}
+
+	/**
+	 * event:
+	 * logical_negation_op 状態遷移判定
+	 */
+	private ev_logic_nega_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'logical_negation_op':
+				check_result = true;
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * logical_negation_op 状態処理
+	 */
+	private at_logic_nega_op = (): void => {
+		this.push_parse_node('logical_negation_op');
+	}
+
+	/**
+	 * event:
+	 * semicolon 状態遷移判定
+	 */
+	private ev_semicolon = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'semicolon':
+				check_result = true;
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * semicolon 状態処理
+	 */
+	private at_semicolon = (): void => {
+		this.push_parse_node('semicolon');
 	}
 
 	/**

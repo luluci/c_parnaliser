@@ -31,11 +31,10 @@ export class ParseNodeGenerator<State> {
 		this._node = ParseNode.eop<State>(state, check, action);
 		return this._node;
 	}
-	public else(state: State, action?: parse_node_action): ParseNode<State> {
+	public else(state: State, action?: parse_node_action_else<State>): ParseNode<State> {
 		this._node = ParseNode.else<State>(state, action);
 		return this._node;
 	}
-
 
 	public seq(nodes: ParseNode<State>[]): ParseNode<State> {
 		this._node = ParseNode.seq<State>(nodes);
@@ -43,6 +42,13 @@ export class ParseNodeGenerator<State> {
 	}
 	public or(nodes: ParseNode<State>[]): ParseNode<State> {
 		this._node = ParseNode.or<State>(nodes);
+		return this._node;
+	}
+
+	public many(node: ParseNode<State>): ParseNode<State> {
+		// manyノードを生成
+		// 引数で渡されたノードへの参照をchildとする。
+		this._node = ParseNode.many<State>(node);
 		return this._node;
 	}
 
@@ -259,7 +265,6 @@ export class ParseNode<State> {
 	/**
 	 * or  
 	 * |  
-	 * orで枝分かれした後に合流は実装しない。
 	 * @param child 
 	 */
 	public or(child: ParseNode<State>[]): ParseNode<State> {
@@ -329,9 +334,10 @@ export class ParseNode<State> {
 	 * 条件にマッチしなかった場合のノードを定義する。
 	 * @param parent 
 	 */
-	public else(state: State, action?: parse_node_action_else<State>): ParseNode<State> {
-		// elseノード
-		let node = ParseNode.else(state, action);
+	public else(node: ParseNode<State>): ParseNode<State> {
+		// elseノード以外はエラーとする
+		if (node._node_type != 'else') throw new Error("ParseTree:InvalidConstruct:else() requires 'else' node.");
+		// elseノードを登録
 		this._set_else(node);
 		return this;
 	}
