@@ -244,7 +244,6 @@ type parse_state =
 	//
 	| 'null';				// 初期状態
 
-type parse_context = parse_state;
 /*
 type parse_context =
 	| 'translation-unit'
@@ -329,7 +328,7 @@ type parse_error_info =
  *      +[]
  */
 export type parse_tree_node = {
-	context: parse_context;
+	state: parse_state;
 	child: parse_tree_node[];
 	parent: parse_tree_node | null;
 	lex: lex_info | null;
@@ -481,13 +480,13 @@ export class parser {
 				pn_id,
 				pn_const,
 				pn_str_lit,
-				pn.seq([pn_lparen, pn_expr, pn_rparen]),
+				pn.seq([pn_lparen, pn_expr, pn_rparen]).else('primary-expression_error', this.at_com_err_not_stop),
 				pn.else('primary-expression_error', this.at_null)
 			]);
 		// (6.5.2) postfix-expression:
 		pn_postfix_expr_1 = pn.node('postfix-expression_1')
 			.or([
-				pn.seq([pn_lbracket, pn_expr, pn_rbracket]),
+				pn.seq([pn_lbracket, pn_expr, pn_rbracket]).else('primary-expression_error', this.at_com_err_not_stop),
 				pn_lparen.opt(pn_arg_expr_list).seq([pn_rbracket]),
 				pn_dot.seq([pn_id]),
 				pn_arrow.seq([pn_id]),
@@ -931,6 +930,14 @@ export class parser {
 		this.push_parse_node('comma');
 	}
 
+	/**
+	 * action:
+	 * common error, not stop
+	 */
+	private at_com_err_not_stop = (states: parse_state[]): void => {
+		this.push_error_node(states[0], 'unexpected-token');
+	}
+
 
 	// preprocessing-directive
 	private ev_pp(): boolean {
@@ -997,14 +1004,14 @@ export class parser {
 	 * 	-> [declaration]			init-declarator-list or ; につながる
 	 * 	-> [function-definition]	declaration-list or { につながる
 	 */
-	private lookahead_jdg_func_decl(pos: number = 0): [parse_context, number] {
+	private lookahead_jdg_func_decl(pos: number = 0): [parse_state, number] {
 		let la_fin: boolean = false;
 		let id: token_id;
 		let id_stack: token_id[] = [];
 		let is_declarator: boolean;
 		let is_declaration: boolean;
 
-		let result: parse_context = '@undecided';
+		let result: parse_state = '@undecided';
 
 		// 空白を事前にスキップ
 		this.skip_whitespace();
@@ -1042,13 +1049,13 @@ export class parser {
 		// 未確定であれば検出済みcontextから判定
 		// このcontextでは直前にdeclaratorが出現している前提
 		// declaratorが変数宣言だったか関数宣言だったか判定する
-		let prev_ctx: parse_context;
+		let prev_ctx: parse_state;
 		prev_ctx = 'null';
 		let { valid, node } = this.get_prev_node_if_not_whitespace();
 		//念のため正常に取得できたかチェック
 		if (valid) {
 			// 直前のtoken/contextによりcontextが確定する
-			switch (node!.context) {
+			switch (node!.state) {
 				case 'declarator_var':
 					prev_ctx = 'declarator_var';
 					break;
@@ -1063,7 +1070,7 @@ export class parser {
 					let id_node: parse_tree_node | null;
 					id_node = this.get_node_declarator_id(node!);
 					if (id_node) {
-						switch (id_node!.context) {
+						switch (id_node!.state) {
 							case 'declarator_var':
 								prev_ctx = 'declarator_var';
 								break;
@@ -1097,14 +1104,14 @@ export class parser {
 	 * statement か declaration(=declaration-specifiers) が出現するcontextにおいて、
 	 * どちらが出現したかをtoken先読みで判定する。
 	 */
-	private lookahead_jdg_state_decl(pos: number = 0): [parse_context, number] {
+	private lookahead_jdg_state_decl(pos: number = 0): [parse_state, number] {
 		let la_fin: boolean = false;
 		let id: token_id;
 		let id_stack: token_id[] = [];
 		let is_decl: boolean;
 		let is_state: boolean;
 
-		let result: parse_context = '@undecided';
+		let result: parse_state = '@undecided';
 
 		// 空白をスキップ
 		this.skip_whitespace();
@@ -1248,13 +1255,13 @@ export class parser {
 	 * parameter-type-list か identifier-list が出現するcontextにおいて、
 	 * どちらが出現したかをtoken先読みで判定する。
 	 */
-	private lookahead_jdg_list_param_id(pos: number = 0): [parse_context, number] {
+	private lookahead_jdg_list_param_id(pos: number = 0): [parse_state, number] {
 		let la_fin: boolean = false;
 		let id: token_id;
 		let id_stack: token_id[] = [];
 		let is_decl: boolean;
 
-		let result: parse_context = '@undecided';
+		let result: parse_state = '@undecided';
 
 		// identifierが出現したときに判定するためにコールする前提
 		// 空白をスキップ
@@ -1310,13 +1317,13 @@ export class parser {
 	 * declarator か abstract-declarator かを判定する
 	 * @param pos 
 	 */
-	private lookahead_jdg_decl_abst(pos: number = 0): [parse_context, number] {
+	private lookahead_jdg_decl_abst(pos: number = 0): [parse_state, number] {
 		let la_fin: boolean = false;
 		let id: token_id;
 		let id_stack: token_id[] = [];
 		let is_decl: boolean;
 
-		let result: parse_context = '@undecided';
+		let result: parse_state = '@undecided';
 
 		// 判定：1st token
 		// 空白文字以外のtokenを取得
@@ -1338,13 +1345,13 @@ export class parser {
 	/**
 	 * expression or type-name を判定する
 	 */
-	private lookahead_jdg_expr_typename(pos: number = 0): [parse_context, number] {
+	private lookahead_jdg_expr_typename(pos: number = 0): [parse_state, number] {
 		let la_fin: boolean = false;
 		let id: token_id;
 		let id_stack: token_id[] = [];
 		let is_decl: boolean;
 
-		let result: parse_context = '@undecided';
+		let result: parse_state = '@undecided';
 
 		// 空白を事前にスキップ
 		this.skip_whitespace();
@@ -1912,19 +1919,19 @@ export class parser {
 		let has_err: boolean = false;
 		tgt_node.child.forEach(node => {
 			if (node.err_info != 'null') has_err = true;
-			if (node.context == 'declaration-specifier') {
+			if (node.state == 'declaration-specifier') {
 				decl_spec_node = node;
 				has_decl_spec = true;
 			}
-			if (node.context == 'declarator') {
+			if (node.state == 'declarator') {
 				decl_node = node;
 				has_decl = true;
 			}
-			if (node.context == 'declarator_var') {
+			if (node.state == 'declarator_var') {
 				decl_node = node;
 				has_decl_var = true;
 			}
-			if (node.context == 'declarator_func') {
+			if (node.state == 'declarator_func') {
 				decl_node = node;
 				has_decl_func = true;
 			}
@@ -2155,7 +2162,7 @@ export class parser {
 	 * @param next_state
 	 * @param return_state
 	 */
-	private switch_new_context(ctx: parse_context, next_state: parse_state, return_state: parse_state, err_info_: parse_error_info = 'null') {
+	private switch_new_context(ctx: parse_state, next_state: parse_state, return_state: parse_state, err_info_: parse_error_info = 'null') {
 		// 新規解析ツリーを作成
 		this.push_parse_tree(ctx, err_info_);
 		// 復帰先状態を登録
@@ -2198,8 +2205,8 @@ export class parser {
 	 * 対象解析ツリーのコンテキストを設定する。
 	 * @param ctx 
 	 */
-	private set_current_context(ctx: parse_context) {
-		this.tgt_node.context = ctx;
+	private set_current_context(ctx: parse_state) {
+		this.tgt_node.state = ctx;
 	}
 	private set_current_context_error(err: parse_error_info) {
 		this.tgt_node.err_info = err;
@@ -2215,13 +2222,13 @@ export class parser {
 	 * @param ctx 		設定context
 	 * @param err_info 	設定error_info
 	 */
-	private set_prev_node_context(rel_idx: number, ctx: parse_context, err_info: parse_error_info = 'null') {
+	private set_prev_node_context(rel_idx: number, ctx: parse_state, err_info: parse_error_info = 'null') {
 		// 1以上、配列要素数未満のとき有効
 		if (rel_idx > 0 && rel_idx < this.tgt_node.child.length) {
 			// this.tgt_node.child[]にアクセスするインデックスに変換
 			rel_idx = this.tgt_node.child.length - rel_idx;
 			// データ更新
-			this.tgt_node.child[rel_idx].context = ctx;
+			this.tgt_node.child[rel_idx].state = ctx;
 			if (err_info != 'null') {
 				this.tgt_node.child[rel_idx].err_info = err_info;
 			}
@@ -2232,7 +2239,7 @@ export class parser {
 	 * 追加したtreeが新しいtgt_nodeとなる。
 	 * @param ctx 解析コンテキスト
 	 */
-	private push_parse_tree(ctx: parse_context, err_info_: parse_error_info = 'null') {
+	private push_parse_tree(ctx: parse_state, err_info_: parse_error_info = 'null') {
 		let new_len: number;
 		new_len = this.tgt_node.child.push(this.get_new_tree(ctx, err_info_));
 		this.tgt_node.child[new_len - 1].parent = this.tgt_node;
@@ -2257,14 +2264,14 @@ export class parser {
 	 * tgt_nodeに字句nodeを追加する。
 	 * nodeを追加したらlexerは次tokenを取得する
 	 */
-	private push_parse_node(ctx: parse_context, err_info: parse_error_info = 'null') {
+	private push_parse_node(ctx: parse_state, err_info: parse_error_info = 'null') {
 		this.tgt_node.child.push(this.get_new_node(ctx, err_info));
 	}
 	/**
 	 * tgt_nodeにエラーnodeを追加する。
 	 * 既定のtokenが出現しなかった場合はエラー情報だけの空nodeを追加する。
 	 */
-	private push_error_node(ctx: parse_context, err_info: parse_error_info) {
+	private push_error_node(ctx: parse_state, err_info: parse_error_info) {
 		this.tgt_node.child.push(this.get_empty_node(ctx, err_info));
 	}
 
@@ -2447,11 +2454,11 @@ export class parser {
 	 * 現在解析中のgrammarの中で前回までに出現したtokenのcontextを取得する
 	 * @param prev_count 何個前のcontextを取得するか。1=1個前
 	 */
-	private get_prev_ctx(prev_count: number = 1): { valid: boolean, ctx?: parse_context } {
+	private get_prev_ctx(prev_count: number = 1): { valid: boolean, ctx?: parse_state } {
 		let { valid, node } = this.get_prev_node(prev_count);
 
 		if (valid) {
-			return { valid: true, ctx: node!.context }
+			return { valid: true, ctx: node!.state }
 		}
 		else {
 			return { valid: false };
@@ -2472,10 +2479,10 @@ export class parser {
 		}
 	}
 
-	private get_new_tree(ctx: parse_context, err_info_: parse_error_info = 'null'): parse_tree_node {
+	private get_new_tree(ctx: parse_state, err_info_: parse_error_info = 'null'): parse_tree_node {
 		let node: parse_tree_node;
 		node = {
-			context: ctx,
+			state: ctx,
 			child: [],
 			parent: null,
 			lex: null,
@@ -2484,10 +2491,10 @@ export class parser {
 		};
 		return node;
 	}
-	private get_new_node(ctx: parse_context, err_info_: parse_error_info = 'null'): parse_tree_node {
+	private get_new_node(ctx: parse_state, err_info_: parse_error_info = 'null'): parse_tree_node {
 		let node: parse_tree_node;
 		node = {
-			context: ctx,
+			state: ctx,
 			child: [],
 			parent: null,
 			//lex: this.token_stack.shift()!,
@@ -2498,10 +2505,10 @@ export class parser {
 		node.lex = this.token_stack.shift()!;
 		return node;
 	}
-	private get_empty_node(ctx: parse_context, err_info_: parse_error_info = 'null'): parse_tree_node {
+	private get_empty_node(state: parse_state, err_info_: parse_error_info = 'null'): parse_tree_node {
 		let node: parse_tree_node;
 		node = {
-			context: ctx,
+			state: state,
 			child: [],
 			parent: null,
 			lex: null,

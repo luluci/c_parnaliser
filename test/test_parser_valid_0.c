@@ -1,2 +1,2 @@
-"fuga"[0] "fuga"[1]
-hoge[hoga]
+"fuga"[0 "hoga"[1]
+array[2]

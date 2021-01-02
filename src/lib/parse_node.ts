@@ -1,11 +1,12 @@
 'use strict';
 
 type parse_proc_t<State> = (node: ParseNode<State>) => boolean;
-type parse_state_check = () => boolean;
-type parse_state_action = () => void;
+type parse_node_check = () => boolean;
+type parse_node_action = () => void;
+type parse_node_action_else<State> = (states: State[]) => void;
 
 type parse_dict<State> = { [state: string]: ParseNode<State>; };
-type parse_node_init<State> = [State, parse_state_check, parse_state_action];
+type parse_node_init<State> = [State, parse_node_check, parse_node_action];
 
 /**
  * ParseNode<T>生成補助クラス
@@ -18,19 +19,19 @@ export class ParseNodeGenerator<State> {
 	}
 
 	// ParseNode生成関数
-	public root(state: State, check?: parse_state_check, action?: parse_state_action): ParseNode<State> {
+	public root(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
 		this._node = ParseNode.root<State>(state, check, action);
 		return this._node;
 	}
-	public node(state: State, check?: parse_state_check, action?: parse_state_action): ParseNode<State> {
+	public node(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
 		this._node = ParseNode.node<State>(state, check, action);
 		return this._node;
 	}
-	public eop(state: State, check?: parse_state_check, action?: parse_state_action): ParseNode<State> {
+	public eop(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
 		this._node = ParseNode.eop<State>(state, check, action);
 		return this._node;
 	}
-	public else(state: State, action?: parse_state_action): ParseNode<State> {
+	public else(state: State, action?: parse_node_action): ParseNode<State> {
 		this._node = ParseNode.else<State>(state, action);
 		return this._node;
 	}
@@ -77,34 +78,35 @@ type parse_check_result =
 
 export class ParseNode<State> {
 	// パーサノード情報
-	private _state: State;									// 自状態
-	private _check: parse_state_check | null;				// 状態遷移チェック
-	private _action: parse_state_action | null;				// 状態処理
-	private _action_post: parse_state_action | null;		// 状態後処理(状態処理実施後に常に実施)
-	private _node_type: parse_node_type;					// ノードタイプ
-	private _err_stop: boolean;								// エラーストップフラグ
-	private _parse_end: boolean;							// End of Perse到達フラグ
+	private _state: State;													// 自状態
+	private _check: parse_node_check | null;								// 状態遷移チェック
+	private _action: parse_node_action | null;								// 状態処理
+	private _action_post: parse_node_action | null;							// 状態後処理(状態処理実施後に常に実施)
+	private _action_else: parse_node_action_else<State> | null;				// else処理
+	private _node_type: parse_node_type;									// ノードタイプ
+	private _err_stop: boolean;												// エラーストップフラグ
+	private _parse_end: boolean;											// End of Perse到達フラグ
 
 	// パーサテーブル
-	private _next: ParseNode<State> | null;						// 次ノード
-	private _else: ParseNode<State> | null;						// 次ノードのいずれにもマッチしなかったケース用ノード
-	private _child: ParseNode<State>[];							// 子ノード
+	private _next: ParseNode<State> | null;									// 次ノード
+	private _else: ParseNode<State> | null;									// 次ノードのいずれにもマッチしなかったケース用ノード
+	private _child: ParseNode<State>[];										// 子ノード
 	// 次ノード解析情報
-	private _tail: ParseNode<State>;								// 末尾ノード
+	private _tail: ParseNode<State>;										// 末尾ノード
 	// 解析一時情報：解析完了で抜けるときにリセットする
-	private _last_checked_idx: number;						// ノード遷移チェックで判定OKになったノード情報
+	private _last_checked_idx: number;										// ノード遷移チェックで判定OKになったノード情報
 	// ノード遷移チェック情報
-	static readonly LAST_CHECKED_NULL: number = -1;			// 未設定/NG
-	static readonly LAST_CHECKED_SELF: number = -2;			// 自身のcheckでOK
-	static readonly LAST_CHECKED_SEQ: number = -3;			// SEQでOK
-	static readonly LAST_CHECKED_CHILD: number = 0;			// CHILDでOK(idxナンバーを設定するのでこの定義は使われない)
+	static readonly LAST_CHECKED_NULL: number = -1;							// 未設定/NG
+	static readonly LAST_CHECKED_SELF: number = -2;							// 自身のcheckでOK
+	static readonly LAST_CHECKED_SEQ: number = -3;							// SEQでOK
+	static readonly LAST_CHECKED_CHILD: number = 0;							// CHILDでOK(idxナンバーを設定するのでこの定義は使われない)
 
 	// パース関数テーブル
 	private _parse_proc_tbl: { [key: string]: parse_proc_t<State> };		// パース処理テーブル
 	private _parse_check_tbl: { [key: string]: parse_proc_t<State> };		// パース遷移チェックテーブル
 
 	// 自状態を定義する
-	constructor(state: State, check?: parse_state_check, action?: parse_state_action) {
+	constructor(state: State, check?: parse_node_check, action?: parse_node_action) {
 		//
 		this._state = state;
 		if (check == null) this._check = null;
@@ -112,6 +114,7 @@ export class ParseNode<State> {
 		if (action == null) this._action = null;
 		else this._action = action;
 		this._action_post = null;
+		this._action_else = null;
 		this._node_type = 'node';
 		this._err_stop = false;
 		this._parse_end = false;
@@ -155,16 +158,16 @@ export class ParseNode<State> {
 	 * stateだけのnodeを作成する。
 	 * @param state 
 	 */
-	static root<State>(state: State, check?: parse_state_check, action?: parse_state_action): ParseNode<State> {
+	static root<State>(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
 		return new ParseNode<State>(state, check, action)._set_type('root');
 	}
-	static node<State>(state: State, check?: parse_state_check, action?: parse_state_action): ParseNode<State> {
+	static node<State>(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
 		return new ParseNode<State>(state, check, action)._set_type('node');
 	}
-	static hub<State>(state: State, check?: parse_state_check, action?: parse_state_action): ParseNode<State> {
+	static hub<State>(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
 		return new ParseNode<State>(state, check, action)._set_type('hub');
 	}
-	static eop<State>(state: State, check?: parse_state_check, action?: parse_state_action): ParseNode<State> {
+	static eop<State>(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
 		return new ParseNode<State>(state, check, action)._set_type('eop');
 	}
 
@@ -326,15 +329,16 @@ export class ParseNode<State> {
 	 * 条件にマッチしなかった場合のノードを定義する。
 	 * @param parent 
 	 */
-	public else(state: State, action?: parse_state_action): ParseNode<State> {
+	public else(state: State, action?: parse_node_action_else<State>): ParseNode<State> {
 		// elseノード
 		let node = ParseNode.else(state, action);
 		this._set_else(node);
 		return this;
 	}
-	static else<State>(state: State, action?: parse_state_action): ParseNode<State> {
+	static else<State>(state: State, action?: parse_node_action_else<State>): ParseNode<State> {
 		// いずれにもマッチしなかった場合に遷移とするのでcheckは除外する
-		let new_node = new ParseNode<State>(state, undefined, action)._set_type('else');
+		let new_node = new ParseNode<State>(state, undefined, undefined)._set_type('else');
+		if (action) new_node.action_else(action);
 		return new_node;
 	}
 	private _set_else(node: ParseNode<State>): ParseNode<State> {
@@ -350,7 +354,7 @@ export class ParseNode<State> {
 	 * 状態処理設定
 	 * @param cb 
 	 */
-	public action(cb: parse_state_action): ParseNode<State> {
+	public action(cb: parse_node_action): ParseNode<State> {
 		this._action = cb;
 		return this;
 	}
@@ -358,8 +362,16 @@ export class ParseNode<State> {
 	 * 状態処理後処理設定
 	 * @param cb 
 	 */
-	public action_post(cb: parse_state_action): ParseNode<State> {
+	public action_post(cb: parse_node_action): ParseNode<State> {
 		this._action_post = cb;
+		return this;
+	}
+	/**
+	 * 状態else処理処理設定
+	 * @param cb 
+	 */
+	public action_else(cb: parse_node_action_else<State>): ParseNode<State> {
+		this._action_else = cb;
 		return this;
 	}
 	/**
@@ -507,7 +519,7 @@ export class ParseNode<State> {
 		} else {
 			// 遷移NG
 			// else処理を実施
-			if (!result) result = this._parse_proc_else(curr._else);
+			if (!result) result = this._parse_proc_else_impl(curr, curr._else);
 		}
 		// 異常発生時
 		if (!result) {
@@ -595,12 +607,33 @@ export class ParseNode<State> {
 		if (result) result = this._parse_proc_node(curr);
 		return result;
 	}
-	private _parse_proc_else(node: ParseNode<State>|null): boolean {
+	private _parse_proc_else(else_node: ParseNode<State>|null): boolean {
 		let result: boolean = false;
-		if (node != null) {
-			result = this._parse_proc(node);
+		if (else_node != null) {
+			result = this._parse_proc_else_impl(null, else_node);
 		}
 		return result;
+	}
+	private _parse_proc_else_impl(fail_node: ParseNode<State> | null, else_node: ParseNode<State> | null): boolean {
+		if (else_node && else_node._action_else) {
+			// fail_nodeから失敗ノードstateを取得
+			let states: State[] = [];
+			if (fail_node != null) {
+				// thisセット
+				states.push(fail_node._state);
+				// childセット
+				for (let node of fail_node._child) {
+					states.push(node._state);
+				}
+				// nextセット
+				if (fail_node._next != null) {
+					states.push(fail_node._next._state);
+				}
+			}
+			// action実行
+			else_node._action_else(states);
+		}
+		return true;
 	}
 	private _parse_proc_eop(curr: ParseNode<State>): boolean {
 		// カレントノード実行
@@ -641,7 +674,7 @@ export class ParseNode<State> {
 
 				default:
 					// else処理を実施
-					result = this._parse_proc_else(else_node);
+					result = this._parse_proc_else_impl(node, else_node);
 					break;
 			}
 		}
@@ -662,7 +695,7 @@ export class ParseNode<State> {
 		} else {
 			// 遷移NG
 			// elseは実行しない。
-			// result = this._parse_proc_else(node);
+			// result = this._parse_proc_else_impl(node, node._else);
 		}
 		return result;
 	}
