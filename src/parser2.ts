@@ -142,6 +142,20 @@ type parse_state =
 	// (*) expression utility
 	| 'typename_in_expr'					// expression内に出現する "( type-name )" を判定する
 	// A.2.2 Declarations
+	// (6.7.2) type-specifier:
+	| 'type-specifier'
+	| 'type-specifier_prim'					// 組み込み型
+	// (6.7.2.1) struct-or-union-specifier:
+	// (6.7.2.1) struct-or-union:
+	// (6.7.2.1) struct-declaration-list:
+	// (6.7.2.1) struct-declaration:
+	// (6.7.2.1) specifier-qualifier-list:
+	| 'specifier-qualifier-list'
+	// (6.7.2.2) enum-specifier:
+	// (6.7.2.2) enumerator-list:
+	// (6.7.2.2) enumerator:
+	// (6.7.3) type-qualifier:
+	| 'type-qualifier'
 	// (6.7.6) type-name:
 	| 'type-name'
 	// (6.7.8) initializer-list:
@@ -164,8 +178,6 @@ type parse_state =
 	| 'declaration_dont_declare'
 	| 'declaration-specifier'
 	| 'init-declarator'					// init-declarator
-	| 'type-specifier'					// 
-	| 'type-qualifier'					//
 	| 'struct-or-union-specifier'		// 
 	| 'struct-or-union'					// 
 	| 'struct-declaration-list'			// 
@@ -488,19 +500,39 @@ class token_queue {
 	}
 
 	/**
-	 * token stack からidxで指定したtokenを返す。
-	 * LookAhead対応。idxが1以上であればtokenを取得して先読みをする。
+	 * token queue からidx番目のtoken(FirstInを0とする)を返す。
+	 * 操作が無ければLastInを返す。
+	 * queueに存在する以上のidxが指定されたらlexerからtokenを取得してqueueに追加する。
 	 */
 	public get(idx?: number): lex_info {
 		// idxを指定していたら参照箇所更新
-		if (!idx) this._curr = this._incr(this._head, idx);
+		if (idx != null) this._curr = this._incr(this._head, idx);
+		// curr と head の差分から必要な要素数を算出
+		let require_size = this._diff(this._curr, this._head);
 		// 指定された数だけtokenをスタック
-		if (this._count <= this._curr) this._enqueue(this._curr - this._count + 1);
+		if (this._count <= require_size) this._enqueue(require_size - this._count + 1);
 		// 指定されたtokenを返す
 		let token: lex_info = this._queue[this._curr]!;
-		// curr更新, 次回get()時は次のtokenを取得する
-		this._curr = this._incr(this._curr);
 		return token;
+	}
+	public get_next(idx: number = 1): lex_info {
+		this._curr = this._incr(this._curr, idx);
+		return this.get();
+	}
+	public get_if(pred: (token: lex_info) => boolean, idx?: number): lex_info {
+		if ( pred( this.get(idx) ) ) {
+			// predがtrueになるまでtoken取得
+			while ( pred( this.get_next() ) );
+		}
+		// 結果を返す
+		return this._queue[this._curr]!;
+	}
+
+	/**
+	 * queueにtokenを追加する
+	 */
+	public enq(idx: number = 1): void {
+		this._enqueue(idx);
 	}
 
 	/**
@@ -510,11 +542,36 @@ class token_queue {
 		return this._dequeue();
 	}
 
+	public curr(): lex_info | null {
+		return this._queue[this._curr];
+	}
+
+	public count(): number {
+		return this._count;
+	}
+
 	public pos(idx?: number): number {
-		if (idx) this._curr = this._incr(this._head, idx);
+		if (idx != null) this._curr = this._incr(this._head, idx);
 		return this._curr;
 	}
 
+	/**
+	 * (キュー上の先頭idx - キュー上の末尾idx) を算出する。
+	 * ロジック上、top_idx > btm_idx である前提の計算になる。
+	 * @param lhs 
+	 * @param rhs 
+	 */
+	private _diff(top_idx:number, btm_idx:number): number {
+		let result: number;
+		if (top_idx >= btm_idx) {
+			// そのまま計算
+			result = top_idx - btm_idx;
+		} else {
+			// 大小関係が逆の場合は、queueを一周しているとみなす
+			result = token_queue.QUEUE_SIZE + top_idx - btm_idx;
+		}
+		return result;
+	}
 	private _incr(idx: number, diff: number = 1): number {
 		if (idx + diff >= token_queue.QUEUE_SIZE) {
 			idx = idx + diff - token_queue.QUEUE_SIZE;
@@ -572,6 +629,7 @@ export class parser {
 	private state: parse_state;
 
 	private pn_root: ParseNode<parse_state>;
+	private _in_lookAhead: boolean;
 
 	// parser解析ツリーもどき
 	private tree: parse_tree_node;					// 解析ツリーもどきroot
@@ -596,7 +654,7 @@ export class parser {
 		this.state = 'null';
 		this.tree = this.get_empty_node('translation-unit');
 		this.token_stack = [];
-		this._token_queue = new token_queue(text)
+		this._token_queue = new token_queue(text);
 		this.tgt_node = this.tree;
 		this.ident_var_tbl = [];
 		this.ident_func_tbl = [];
@@ -609,6 +667,7 @@ export class parser {
 		this.expr_info_stack = [];
 		this.pn_root = new ParseNode<parse_state>('null');
 		this.make_parse_tree();
+		this._in_lookAhead = false;
 	}
 
 	private make_parse_tree() {
@@ -669,6 +728,13 @@ export class parser {
 		// (*) expression utility
 		let pn_typename_in_expr: parse_node;
 		// A.2.2 Declarations
+		// (6.7.2) type-specifier:
+		let pn_type_spec = pn.node('type-specifier');
+		let pn_type_spec_prim = pn.node('type-specifier_prim', this.ev_type_spec_prim, this.at_type_spec_prim);
+		// (6.7.2.1) specifier-qualifier-list:
+		let pn_spec_qual_list = pn.node('specifier-qualifier-list');
+		// (6.7.3) type-qualifier:
+		let pn_type_qual = pn.node('type-qualifier', this.ev_type_qual, this.at_type_qual);
 		// (6.7.6) type-name:
 		let pn_typename = pn.node('type-name');
 		// (6.7.8) initializer-list:
@@ -695,6 +761,7 @@ export class parser {
 				pn_id,
 				pn_const,
 				pn_str_lit,
+				// ( expr ) はcast-exprと競合があるため注意
 				pn.seq([pn_lparen, pn_expr, pn_rparen]).else(pn_primary_expr_else),
 			]);
 		// (6.5.2) postfix-expression:
@@ -740,19 +807,39 @@ export class parser {
 			pn_logic_nega_op,
 		]);
 		// (6.5.4) cast-expression:
+		// 先頭のleft paren, left paren + type-name がgrammar上競合する。
+		// lookAheadで判定を先に実行する。
+		//     (1) cast-expression:    ( type-name ) cast-expression
+		//     (2) postfix-expression: ( type-name ) { initializer-list }
+		//     (3) primary-expression: ( expression )
 		// 「( type-name )」の後には、cast-expr か postfix-exprのinit-list が出現する可能性がある。
 		// grammarの節を越えて競合がある点に注意。
 		pn_cast_expr.or([
+			// postfix-expression: init-list はここで判定する
+			pn.lookAhead( pn.seq([pn_lparen, pn_typename, pn_rparen]), this.at_la_before, this.at_la_after)
+				.or([
+					pn.seq([pn_lbrace, pn_init_list]).opt(pn_comma).seq([pn_rbrace]),
+					pn_cast_expr,
+				]),
 			pn_unary_expr,
-			pn.seq([pn_lparen, pn_typename, pn_rparen]).or([
-				pn.seq([pn_lbrace, pn_init_list]).opt(pn_comma).seq([pn_rbrace]),
-				pn_cast_expr,
-			]),
 		])
 		// (6.5.17) expression:
 		pn_expr.many(pn_postfix_expr);
 		// A.2.2 Declarations
+		// (6.7.2) type-specifier:
+		pn_type_spec.or([
+			pn_type_spec_prim,
+
+		]);
+		// (6.7.2.1) specifier-qualifier-list:
+		pn_spec_qual_list.many1(
+			pn.or([
+				pn_type_spec,
+				pn_type_qual,
+			])
+		);
 		// (6.7.6) type-name:
+		pn_typename.seq([pn_spec_qual_list, ]);
 		// external-declaration
 		// function-definition / declaration は declaration-specifier まで共通
 		/*
@@ -812,12 +899,27 @@ export class parser {
 	}
 
 	/**
+	 * action:
+	 * lookAhead before process
+	 */
+	private at_la_before = (): void => {
+		this._in_lookAhead = true;
+		this._token_queue.pos(0);
+	}
+	/**
+	 * action:
+	 * lookAhead after process
+	 */
+	private at_la_after = (): void => {
+		this._in_lookAhead = false;
+	}
+
+	/**
 	 * EOF
 	 */
 	private ev_eof = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'EOF':
 				check_result = true;
 				break;
@@ -840,10 +942,10 @@ export class parser {
 	 */
 	private ev_sizeof = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'sizeof':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -865,10 +967,10 @@ export class parser {
 	 */
 	private ev_identifier = ():boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'identifier':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -890,8 +992,7 @@ export class parser {
 	 */
 	private ev_constant = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'char_constant':
 			case 'decimal_constant':
 			case 'decimal_float_constant':
@@ -899,6 +1000,7 @@ export class parser {
 			case 'hex_float_constant':
 			case 'octal_constant':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -920,10 +1022,10 @@ export class parser {
 	 */
 	private ev_str_lit = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'string_literal':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -945,10 +1047,10 @@ export class parser {
 	 */
 	private ev_lbracket = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'left_bracket':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -970,10 +1072,10 @@ export class parser {
 	 */
 	private ev_rbracket = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'right_bracket':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -995,10 +1097,10 @@ export class parser {
 	 */
 	private ev_lbrace = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'left_brace':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1020,10 +1122,10 @@ export class parser {
 	 */
 	private ev_rbrace = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'right_brace':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1045,10 +1147,10 @@ export class parser {
 	 */
 	private ev_lparen = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'left_paren':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1070,10 +1172,10 @@ export class parser {
 	 */
 	private ev_rparen = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'right_paren':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1095,10 +1197,10 @@ export class parser {
 	 */
 	private ev_dot = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'dot':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1120,10 +1222,10 @@ export class parser {
 	 */
 	private ev_arrow_op = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'arrow_op':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1145,10 +1247,10 @@ export class parser {
 	 */
 	private ev_incr_op = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'increment_op':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1170,10 +1272,10 @@ export class parser {
 	 */
 	private ev_decl_op = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'decrement_op':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1195,10 +1297,10 @@ export class parser {
 	 */
 	private ev_amp = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'ampersand':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1220,10 +1322,10 @@ export class parser {
 	 */
 	private ev_aster = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'asterisk':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1245,10 +1347,10 @@ export class parser {
 	 */
 	private ev_plus = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'plus':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1270,10 +1372,10 @@ export class parser {
 	 */
 	private ev_minus = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'minus':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1295,10 +1397,10 @@ export class parser {
 	 */
 	private ev_bitw_cmpl_op = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'bitwise_complement_op':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1320,10 +1422,10 @@ export class parser {
 	 */
 	private ev_logic_nega_op = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'logical_negation_op':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1345,10 +1447,10 @@ export class parser {
 	 */
 	private ev_semicolon = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'semicolon':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1370,10 +1472,10 @@ export class parser {
 	 */
 	private ev_comma = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			case 'comma':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1391,14 +1493,24 @@ export class parser {
 
 	/**
 	 * event:
-	 * expressionコンテキスト内 ( type-name ) 状態遷移判定
+	 * type-specifier_組み込み型 状態遷移判定
 	 */
-	private ev_typename_in_expr = (): boolean => {
+	private ev_type_spec_prim = (): boolean => {
 		let check_result: boolean = false;
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
-			case 'comma':
+		switch (this.get_token_id()) {
+			case 'void':
+			case 'char':
+			case 'short':
+			case 'int':
+			case 'long':
+			case 'float':
+			case 'double':
+			case 'signed':
+			case 'unsigned':
+			case '_Bool':
+			case '_Complex':
 				check_result = true;
+				this.get_token_next();
 				break;
 			default:
 				check_result = false;
@@ -1408,10 +1520,37 @@ export class parser {
 	}
 	/**
 	 * action:
-	 * expressionコンテキスト内 ( type-name ) 状態処理
+	 * type-specifier_組み込み型 状態処理
 	 */
-	private at_typename_in_expr = (): void => {
-		this.push_parse_node('comma');
+	private at_type_spec_prim = (): void => {
+		this.push_parse_node('type-specifier');
+	}
+
+	/**
+	 * event:
+	 * type-qualifier 状態遷移判定
+	 */
+	private ev_type_qual = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'const':
+			case 'restrict':
+			case 'volatile':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * type-qualifier 状態処理
+	 */
+	private at_type_qual = (): void => {
+		this.push_parse_node('type-qualifier');
 	}
 
 	/**
@@ -1427,8 +1566,7 @@ export class parser {
 	private ev_pp(): boolean {
 		// 必ずdeclaration-specifiersから始まる。
 		// ただし、pp-directivesの処理をしていないのでここで登場する。
-//		switch (this.get_token_id()) {
-		switch (this._token_queue.get(0).id) {
+		switch (this.get_token_id()) {
 			// Preprocessor directive
 			case 'pp_define':
 			case 'pp_elif':
@@ -1444,6 +1582,7 @@ export class parser {
 			case 'pp_pragma':
 			case 'pp_token':
 			case 'pp_undef':
+				this.get_token_next();
 				return true;
 				break;
 		}
@@ -1971,10 +2110,14 @@ export class parser {
 	}
 
 
-
+	/**
+	 * 次に出現しているtokenが空白以外になるようにする
+	 */
 	private skip_whitespace() {
-		while (this.is_whitespace()) {
-			this.push_parse_node('@WHITESPACE');
+		if (this._token_queue.count() == 0) {
+			while (this.is_whitespace()) {
+				this.push_parse_node('@WHITESPACE');
+			}
 		}
 	}
 	private is_whitespace(id?: token_id): boolean {
@@ -2830,9 +2973,41 @@ export class parser {
 		} while (!pred(token_));
 		return [token_, pos - 1];
 	}
+
+	private get_token_next(idx?: number): lex_info {
+		return this._token_queue.get_next(idx);
+	}
 	/**
 	 * token stack からidxで指定したtokenのidを返す
 	 */
+	private get_token_id(idx?: number): token_id {
+		let result: token_id;
+		//
+		if (this._in_lookAhead) {
+			result = this._token_queue.get_if( this._pred_token_is_whitespace, idx ).id;
+		} else {
+			if (idx == null) idx = 0;
+			result = this._token_queue.get(idx).id;
+		}
+		return result;
+	}
+	private _pred_token_is_whitespace = (token: lex_info): boolean => {
+		return this.is_whitespace(token.id);
+	}
+
+	private get_token_id_if(pred: (token: lex_info) => boolean, pos: number = 0): [token_id, number] {
+		let token: lex_info;
+		let new_pos: number;
+		[token, new_pos] = this.get_token_if(pred, pos);
+		return [token.id, new_pos];
+	}
+	private get_token_id_if_not_whitespace(pos: number = 0): [token_id, number] {
+		let token: lex_info;
+		let new_pos: number;
+		[token, new_pos] = this.get_token_if((token: lex_info) => !this.is_whitespace(token.id), pos);
+		return [token.id, new_pos];
+	}
+	/*
 	private get_token_id(idx: number = 0): token_id {
 		return this.get_token(idx).id;
 	}
@@ -2848,6 +3023,7 @@ export class parser {
 		[token, new_pos] = this.get_token_if((token: lex_info) => !this.is_whitespace(token.id), pos);
 		return [token.id, new_pos];
 	}
+	*/
 	/**
 	 * token stack からidxで指定したtokenのidを返す
 	 */

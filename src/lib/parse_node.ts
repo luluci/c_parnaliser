@@ -52,6 +52,12 @@ export class ParseNodeGenerator<State> {
 		return this._node;
 	}
 
+	public lookAhead(child: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action): ParseNode<State> {
+		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
+		this._node = ParseNode.lookAhead(child, action_la_before, action_la_after, action);
+		return this._node;
+	}
+
 	/**
 	 * 保持しているノードを渡して生成完了
 	 */
@@ -73,6 +79,7 @@ type parse_node_type =
 	| 'opt'					// optノード
 	| 'many'				// manyノード
 	| 'many1'				// many1ノード
+	| 'lookAhead'			// lookAheadノード
 	| 'else'				// elseマッチノード
 	| 'eop'					// End of Perseノード
 	| 'node';				// 通常ノード
@@ -88,6 +95,8 @@ export class ParseNode<State> {
 	private _check: parse_node_check | null;								// 状態遷移チェック
 	private _action: parse_node_action | null;								// 状態処理
 	private _action_post: parse_node_action | null;							// 状態後処理(状態処理実施後に常に実施)
+	private _action_lookAhead_before: parse_node_action | null;				// lookAhead開始前処理
+	private _action_lookAhead_after: parse_node_action | null;				// lookAhead開始後処理
 	private _action_else: parse_node_action_else<State> | null;				// else処理
 	private _node_type: parse_node_type;									// ノードタイプ
 	private _err_stop: boolean;												// エラーストップフラグ
@@ -120,6 +129,8 @@ export class ParseNode<State> {
 		if (action == null) this._action = null;
 		else this._action = action;
 		this._action_post = null;
+		this._action_lookAhead_before = null;
+		this._action_lookAhead_after = null;
 		this._action_else = null;
 		this._node_type = 'node';
 		this._err_stop = false;
@@ -142,6 +153,7 @@ export class ParseNode<State> {
 		this._parse_proc_tbl['opt'] = this._parse_proc_opt;
 		this._parse_proc_tbl['many'] = this._parse_proc_many;
 		this._parse_proc_tbl['many1'] = this._parse_proc_many1;
+		this._parse_proc_tbl['lookAhead'] = this._parse_proc_lookAhead;
 		this._parse_proc_tbl['else'] = this._parse_proc_else;
 		this._parse_proc_tbl['node'] = this._parse_proc_node;
 		this._parse_proc_tbl['eop'] = this._parse_proc_eop;
@@ -154,6 +166,7 @@ export class ParseNode<State> {
 		this._parse_check_tbl['opt'] = this._parse_check_opt;
 		this._parse_check_tbl['many'] = this._parse_check_many;
 		this._parse_check_tbl['many1'] = this._parse_check_many1;
+		this._parse_check_tbl['lookAhead'] = this._parse_check_lookAhead;
 		this._parse_check_tbl['else'] = this._parse_check_else;
 		this._parse_check_tbl['node'] = this._parse_check_node;
 		this._parse_check_tbl['eop'] = this._parse_check_eop;
@@ -330,6 +343,27 @@ export class ParseNode<State> {
 		new_node._child.push(node);
 		return new_node;
 	}
+	/** lookAhead  
+	 * 先読み判定  
+	 * [check]action_lookAhead -> [action]action の順に実行される。
+	 * @param parent 
+	 */
+	public lookAhead(child: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action): ParseNode<State> {
+		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
+		let node = ParseNode.lookAhead(child, action_la_before, action_la_after, action);
+		// ノード登録
+		this._next_push(node);
+		return this;
+	}
+	static lookAhead<State>(node: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action): ParseNode<State> {
+		// いずれにもマッチしなかった場合に遷移とするのでcheckは除外する
+		let new_node = new ParseNode<State>(node._state)._set_type('lookAhead');
+		if (action_la_before) new_node.action_lookAhead_before(action_la_before);
+		if (action_la_after) new_node.action_lookAhead_after(action_la_after);
+		if (action) new_node.action(action);
+		new_node._child.push(node);
+		return new_node;
+	}
 	/** else  
 	 * 条件にマッチしなかった場合のノードを定義する。
 	 * @param parent 
@@ -373,7 +407,23 @@ export class ParseNode<State> {
 		return this;
 	}
 	/**
-	 * 状態else処理処理設定
+	 * lookAhead開始時処理設定
+	 * @param cb 
+	 */
+	public action_lookAhead_before(cb: parse_node_action): ParseNode<State> {
+		this._action_lookAhead_before = cb;
+		return this;
+	}
+	/**
+	 * lookAhead開始時処理設定
+	 * @param cb 
+	 */
+	public action_lookAhead_after(cb: parse_node_action): ParseNode<State> {
+		this._action_lookAhead_after = cb;
+		return this;
+	}
+	/**
+	 * else処理設定
 	 * @param cb 
 	 */
 	public action_else(cb: parse_node_action_else<State>): ParseNode<State> {
@@ -613,6 +663,18 @@ export class ParseNode<State> {
 		if (result) result = this._parse_proc_node(curr);
 		return result;
 	}
+	private _parse_proc_lookAhead(curr: ParseNode<State>): boolean {
+		let result: boolean = true;
+		// カレントノード実行
+		this._run_action(curr);
+		// child処理
+		result = this._parse_proc_seq_impl(curr);
+		// EOPで解析終了
+		if (this._parse_end) return result;
+		// next処理
+		if (result) result = this._parse_proc_node(curr);
+		return result;
+	}
 	private _parse_proc_else(else_node: ParseNode<State>|null): boolean {
 		let result: boolean = false;
 		if (else_node != null) {
@@ -715,6 +777,92 @@ export class ParseNode<State> {
 		// ノードタイプに応じた処理を実施
 		result = this._parse_check_tbl[next._node_type].call(this,next);
 		return result;
+	}
+	/**
+	 * 対象ノードに対して末尾まで状態遷移判定を実行
+	 * @param next 
+	 */
+	private _parse_check_impl_recur(next: ParseNode<State>): boolean {
+		let result: boolean = false;
+		let check_result_self: parse_check_result;
+		let check_result_child: parse_check_result;
+		let check_result_seq: parse_check_result;
+		// ノードcheck判定
+		check_result_self = this._parse_check_impl_check(next);
+		if (check_result_self == 'check_ng') {
+			// 判定NGなら終了
+			result = false;
+		} else {
+			// 判定OK,未確定ならchild判定
+			check_result_child = this._parse_check_impl_recur_child(next);
+			if (check_result_child == 'check_ng') {
+				// 判定NGなら終了
+				result = false;
+			} else {
+				// 判定OK,未確定ならnext判定
+				if (next._next == null) {
+					// nullなら末尾到達でOK
+					result = true;
+				} else {
+					// ノードが続いていれば再帰的にチェック
+					result = this._parse_check_impl_recur(next._next);
+				}
+			}
+		}
+		return result;
+	}
+	/**
+	 * 対象ノードに対して末尾まで状態遷移判定を実行
+	 * @param next 
+	 */
+	private _parse_check_impl_recur_child(next: ParseNode<State>): parse_check_result {
+		let result: boolean = false;
+		let check_result: parse_check_result;
+
+		switch (next._node_type) {
+			case 'root':
+			case 'node':
+			case 'hub':
+			case 'lookAhead':
+				// childを1つだけとりうる -> 全チェックでOK
+			case 'seq':
+			case 'many1':
+				// 所持しているchildがすべてOKであることを確認する
+				check_result = 'check_ok';
+				for (let node of next._child) {
+					// 1つでもNGがあればNG
+					result = this._parse_check_impl_recur(node);
+					if (!result) {
+						check_result = 'check_ng';
+						break;
+					}
+				}
+				break;
+			case 'opt':
+			case 'many':
+				// skip ok なのでそのままOKにする
+				check_result = 'check_ok';
+				break;
+			case 'or':
+				// 所持しているchildのうちいずれかがOKであることを確認する
+				check_result = 'check_ng';
+				for (let node of next._child) {
+					// 1つでもNGがあればNG
+					result = this._parse_check_impl_recur(node);
+					if (result) {
+						check_result = 'check_ok';
+						break;
+					}
+				}
+				break;
+			case 'eop':
+			case 'else':
+				// 特殊ノードなのでOKとする
+				check_result = 'check_ok';
+				break;
+		}
+
+		return check_result;
 	}
 	/**
 	 * checkに対して状態遷移判定を実行
@@ -909,6 +1057,22 @@ export class ParseNode<State> {
 		let result: boolean = false;
 		// 'node'と同じ処理
 		result = this._parse_check_node(next);
+		return result;
+	}
+	/**
+	 * lookAheadノード状態遷移判定
+	 * childノードを末端までチェックのみ実施する。
+	 * @param next 
+	 */
+	private _parse_check_lookAhead(next: ParseNode<State>): boolean {
+		let result: boolean = false;
+		let check_result: parse_check_result;
+		// action_lookAhead_before実行
+		next._action_lookAhead_before?.();
+		// nextを末尾までチェック
+		result = this._parse_check_impl_recur(next);
+		// action_lookAhead_after実行
+		next._action_lookAhead_after?.();
 		return result;
 	}
 	private _parse_check_else(next: ParseNode<State>): boolean {
