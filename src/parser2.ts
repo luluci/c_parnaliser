@@ -751,12 +751,12 @@ export class parser {
 
 		// 解析ツリー作成
 		// A.2.1 Expressions
-		pn_expr = pn.root('expression');
+		pn_expr = pn.root('expression', undefined, this.at_expr, this.pa_expr);
 		// (*) expression utility
 		pn_typename_in_expr = pn.node('typename_in_expr', this.ev_null, this.at_null);
 		// (6.5.1) primary-expression:
 		pn_primary_expr_else = pn.else('primary-expression_error', this.at_com_err_not_stop);
-		pn_primary_expr = pn.node('primary-expression')
+		pn_primary_expr = pn.node('primary-expression', undefined, this.at_prim_expr, this.pa_prim_expr)
 			.or([
 				pn_id,
 				pn_const,
@@ -779,7 +779,7 @@ export class parser {
 			.or([
 				pn.seq([pn_lparen, pn_typename, pn_rparen, pn_lbrace, pn_init_list]).opt(pn_comma).seq([pn_rbrace]),
 			]);
-		pn_postfix_expr = pn.node('postfix-expression')
+		pn_postfix_expr = pn.node('postfix-expression', undefined, this.at_postfix_expr, this.pa_postfix_expr)
 			.or([
 				pn.seq([pn_primary_expr]).many(pn_postfix_expr_1),
 //				pn.seq([pn_primary_expr, pn.many(pn_postfix_expr_1)]),	// ↑どっちでも同じ
@@ -869,7 +869,6 @@ export class parser {
 			);
 
 		this.pn_root = pn_root;
-		this.pn_root.action_post(this.at_post);
 	}
 
 
@@ -1492,6 +1491,86 @@ export class parser {
 		this.push_parse_node('comma');
 	}
 
+
+
+	///////////////////////////////////////
+	// A.2.1 Expressions
+	///////////////////////////////////////
+	/**
+	 * event:
+	 * primary-expression 状態遷移判定
+	 */
+	private ev_prim_expr = (): boolean => {
+		return true;
+	}
+	/**
+	 * action:
+	 * primary-expression 状態処理
+	 */
+	private at_prim_expr = (): void => {
+		// 新規解析ツリーを作成
+		this.push_parse_tree('primary-expression');
+	}
+	/**
+	 * post-action:
+	 * primary-expression 状態後処理
+	 */
+	private pa_prim_expr = (): void => {
+		// 解析終了してツリーを戻る
+		this.pop_parse_tree()
+	}
+
+	/**
+	 * event:
+	 * postfix-expression 状態遷移判定
+	 */
+	private ev_postfix_expr = (): boolean => {
+		return true;
+	}
+	/**
+	 * action:
+	 * postfix-expression 状態処理
+	 */
+	private at_postfix_expr = (): void => {
+		// 新規解析ツリーを作成
+		this.push_parse_tree('postfix-expression');
+	}
+	/**
+	 * post-action:
+	 * postfix-expression 状態後処理
+	 */
+	private pa_postfix_expr = (): void => {
+		// 解析終了してツリーを戻る
+		this.pop_parse_tree()
+	}
+
+
+	/**
+	 * event:
+	 * expression 状態遷移判定
+	 */
+	private ev_expr = (): boolean => {
+		return true;
+	}
+	/**
+	 * action:
+	 * expression 状態処理
+	 */
+	private at_expr = (): void => {
+		// 新規解析ツリーを作成
+		this.push_parse_tree('expression');
+	}
+	/**
+	 * post-action:
+	 * expression 状態後処理
+	 */
+	private pa_expr = (): void => {
+		// 解析終了してツリーを戻る
+		this.pop_parse_tree()
+	}
+
+
+
 	/**
 	 * event:
 	 * type-specifier_組み込み型 状態遷移判定
@@ -1561,6 +1640,9 @@ export class parser {
 	private at_com_err_not_stop = (states: parse_state[]): void => {
 		this.push_error_node(states[0], 'unexpected-token');
 	}
+
+
+
 
 
 	// preprocessing-directive
@@ -2403,6 +2485,8 @@ export class parser {
 	 */
 	private push_parse_node(ctx: parse_state, err_info: parse_error_info = 'null') {
 		this.tgt_node.child.push(this.get_new_node(ctx, err_info));
+		// 空白をスキップ
+		this.skip_whitespace();
 	}
 	/**
 	 * tgt_nodeにエラーnodeを追加する。

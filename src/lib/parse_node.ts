@@ -17,16 +17,16 @@ export class ParseNodeGenerator<State> {
 	}
 
 	// ParseNode生成関数
-	public root(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
-		this._node = ParseNode.root<State>(state, check, action);
+	public root(state: State, check?: parse_node_check, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
+		this._node = ParseNode.root<State>(state, check, action, action_post);
 		return this._node;
 	}
-	public node(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
-		this._node = ParseNode.node<State>(state, check, action);
+	public node(state: State, check?: parse_node_check, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
+		this._node = ParseNode.node<State>(state, check, action, action_post);
 		return this._node;
 	}
-	public eop(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
-		this._node = ParseNode.eop<State>(state, check, action);
+	public eop(state: State, check?: parse_node_check, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
+		this._node = ParseNode.eop<State>(state, check, action, action_post);
 		return this._node;
 	}
 	public else(state: State, action?: parse_node_action_else<State>): ParseNode<State> {
@@ -50,9 +50,9 @@ export class ParseNodeGenerator<State> {
 		return this._node;
 	}
 
-	public lookAhead(child: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action): ParseNode<State> {
+	public lookAhead(child: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
 		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
-		this._node = ParseNode.lookAhead(child, action_la_before, action_la_after, action);
+		this._node = ParseNode.lookAhead(child, action_la_before, action_la_after, action, action_post);
 		return this._node;
 	}
 
@@ -92,7 +92,7 @@ export class ParseNode<State> {
 	private _state: State;													// 自状態
 	private _check: parse_node_check | null;								// 状態遷移チェック
 	private _action: parse_node_action | null;								// 状態処理
-	private _action_post: parse_node_action | null;							// 状態後処理(状態処理実施後に常に実施)
+	private _action_post: parse_node_action | null;							// 状態後処理
 	private _action_lookAhead_before: parse_node_action | null;				// lookAhead開始前処理
 	private _action_lookAhead_after: parse_node_action | null;				// lookAhead開始後処理
 	private _action_else: parse_node_action_else<State> | null;				// else処理
@@ -119,14 +119,15 @@ export class ParseNode<State> {
 	private _parse_check_tbl: { [key: string]: parse_proc_check_t<State> };		// パース遷移チェックテーブル
 
 	// 自状態を定義する
-	constructor(state: State, check?: parse_node_check, action?: parse_node_action) {
+	constructor(state: State, check?: parse_node_check, action?: parse_node_action, action_post?: parse_node_action) {
 		//
 		this._state = state;
 		if (check == null) this._check = null;
 		else this._check = check;
 		if (action == null) this._action = null;
 		else this._action = action;
-		this._action_post = null;
+		if (action_post == null) this._action_post = null;
+		else this._action_post = action_post;
 		this._action_lookAhead_before = null;
 		this._action_lookAhead_after = null;
 		this._action_else = null;
@@ -175,17 +176,17 @@ export class ParseNode<State> {
 	 * stateだけのnodeを作成する。
 	 * @param state 
 	 */
-	static root<State>(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
-		return new ParseNode<State>(state, check, action)._set_type('root');
+	static root<State>(state: State, check?: parse_node_check, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
+		return new ParseNode<State>(state, check, action, action_post)._set_type('root');
 	}
-	static node<State>(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
-		return new ParseNode<State>(state, check, action)._set_type('node');
+	static node<State>(state: State, check?: parse_node_check, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
+		return new ParseNode<State>(state, check, action, action_post)._set_type('node');
 	}
-	static hub<State>(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
-		return new ParseNode<State>(state, check, action)._set_type('hub');
+	static hub<State>(state: State, check?: parse_node_check, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
+		return new ParseNode<State>(state, check, action, action_post)._set_type('hub');
 	}
-	static eop<State>(state: State, check?: parse_node_check, action?: parse_node_action): ParseNode<State> {
-		return new ParseNode<State>(state, check, action)._set_type('eop');
+	static eop<State>(state: State, check?: parse_node_check, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
+		return new ParseNode<State>(state, check, action, action_post)._set_type('eop');
 	}
 
 	private _set_type(node_type: parse_node_type): ParseNode<State> {
@@ -346,19 +347,20 @@ export class ParseNode<State> {
 	 * [check]action_lookAhead -> [action]action の順に実行される。
 	 * @param parent 
 	 */
-	public lookAhead(child: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action): ParseNode<State> {
+	public lookAhead(child: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
 		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
-		let node = ParseNode.lookAhead(child, action_la_before, action_la_after, action);
+		let node = ParseNode.lookAhead(child, action_la_before, action_la_after, action, action_post);
 		// ノード登録
 		this._next_push(node);
 		return this;
 	}
-	static lookAhead<State>(node: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action): ParseNode<State> {
+	static lookAhead<State>(node: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
 		// いずれにもマッチしなかった場合に遷移とするのでcheckは除外する
 		let new_node = new ParseNode<State>(node._state)._set_type('lookAhead');
 		if (action_la_before) new_node.action_lookAhead_before(action_la_before);
 		if (action_la_after) new_node.action_lookAhead_after(action_la_after);
 		if (action) new_node.action(action);
+		if (action_post) new_node.action_post(action_post);
 		new_node._child.push(node);
 		return new_node;
 	}
@@ -476,7 +478,7 @@ export class ParseNode<State> {
 	}
 	private _parse_proc_node(curr: ParseNode<State>): boolean {
 		let result: boolean = false;
-		// カレントノード実行
+		// アクション実行
 		this._run_action(curr);
 		// 状態遷移チェック
 		if (curr._next == null) {
@@ -491,6 +493,8 @@ export class ParseNode<State> {
 				if (curr._err_stop) result = true;
 			}
 		}
+		// 処理後アクション実行
+		this._run_action_post(curr);
 		return result;
 	}
 	private _parse_proc_hub(curr: ParseNode<State>): boolean {
@@ -512,6 +516,8 @@ export class ParseNode<State> {
 		this._run_action(curr);
 		// child処理
 		result = this._parse_proc_seq_impl(curr);
+		// 処理後アクション実行
+		this._run_action_post(curr);
 		// EOPで解析終了
 		if (this._parse_end) return result;
 		// next処理
@@ -548,6 +554,8 @@ export class ParseNode<State> {
 		this._run_action(curr);
 		// child処理
 		result = this._parse_proc_or_impl(curr);
+		// 処理後アクション実行
+		this._run_action_post(curr);
 		// EOPで解析終了
 		if (this._parse_end) return result;
 		// next処理
@@ -593,6 +601,8 @@ export class ParseNode<State> {
 		// 次ノード処理(check,proc)(elseなし)
 		// 必ずtrueで終了
 		result = this._parse_proc_impl_check_proc(curr._child[0]);
+		// 処理後アクション実行
+		this._run_action_post(curr);
 		// EOPで解析終了
 		if (this._parse_end) return result;
 		// next処理
@@ -605,6 +615,8 @@ export class ParseNode<State> {
 		this._run_action(curr);
 		// child処理
 		result = this._parse_proc_many_impl(curr);
+		// 処理後アクション実行
+		this._run_action_post(curr);
 		// EOPで解析終了
 		if (this._parse_end) return result;
 		// next処理
@@ -654,6 +666,8 @@ export class ParseNode<State> {
 		// child処理
 		// エラーストップはそれぞれのimpl内で実施済み
 		result = this._parse_proc_seq_impl(curr);
+		// 処理後アクション実行
+		this._run_action_post(curr);
 		// EOPで解析終了
 		if (this._parse_end) return result;
 		if (result) result = this._parse_proc_many_impl(curr);
@@ -669,6 +683,8 @@ export class ParseNode<State> {
 		this._run_action(curr);
 		// child処理
 		result = this._parse_proc_seq_impl(curr);
+		// 処理後アクション実行
+		this._run_action_post(curr);
 		// EOPで解析終了
 		if (this._parse_end) return result;
 		// next処理
@@ -708,6 +724,8 @@ export class ParseNode<State> {
 		this._run_action(curr);
 		// EOP設定
 		this._parse_end = true;
+		// 処理後アクション実行
+		this._run_action_post(curr);
 		return true;
 	}
 	/**
@@ -1039,14 +1057,12 @@ export class ParseNode<State> {
 		// nullのときは何もせず終了
 		if (curr._action != null) {
 			curr._action();
-			// 共通後処理を実行
-			this._run_action_post();
 		}
 	}
-	private _run_action_post = (): void => {
+	private _run_action_post = (curr: ParseNode<State>): void => {
 		// nullのときは何もせず終了
-		if (this._action_post != null) {
-			this._action_post();
+		if (curr._action_post != null) {
+			curr._action_post();
 		}
 	}
 
