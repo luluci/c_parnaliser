@@ -630,6 +630,7 @@ export class parser {
 
 	private pn_root: ParseNode<parse_state>;
 	private _in_lookAhead: boolean;
+	private _in_lookAhead_stack: boolean[];
 
 	// parser解析ツリーもどき
 	private tree: parse_tree_node;					// 解析ツリーもどきroot
@@ -668,6 +669,7 @@ export class parser {
 		this.pn_root = new ParseNode<parse_state>('null');
 		this.make_parse_tree();
 		this._in_lookAhead = false;
+		this._in_lookAhead_stack = Array<boolean>(100).fill(false);
 	}
 
 	private make_parse_tree() {
@@ -681,6 +683,7 @@ export class parser {
 		let pn_sizeof = pn.node('sizeof', this.ev_sizeof, this.at_sizeof);
 		// A.1.3 Identifiers
 		let pn_id = pn.node('identifier', this.ev_identifier, this.at_identifier);
+		let pn_tn_id = pn.node('type-name', this.ev_identifier, this.at_identifier);		// 未解析type-nameがidentifierと解釈されるケース
 		// A.1.5 Constants
 		let pn_const = pn.node('constant', this.ev_constant, this.at_constant);
 		// A.1.6 String literals
@@ -814,7 +817,15 @@ export class parser {
 		//     (3) primary-expression: ( expression )
 		// 「( type-name )」の後には、cast-expr か postfix-exprのinit-list が出現する可能性がある。
 		// grammarの節を越えて競合がある点に注意。
+		// ※include解析を行わない場合、type-name と identifier の区別ができないため、先読みで推論を行う
+		// (type-name)
+		let pn_infer_tn_expr = pn.lookAhead(pn.seq([pn_lparen, pn_tn_id, pn_rparen, pn_cast_expr]), this.at_la_before, this.at_la_after);
+		let pn_infer_tn_init = pn.lookAhead(pn.seq([pn_lparen, pn_tn_id, pn_rparen, pn_lbrace]), this.at_la_before, this.at_la_after)
+									.seq([pn_init_list]).opt(pn_comma).seq([pn_rbrace]);
+		// 
 		pn_cast_expr.or([
+			pn_infer_tn_init,
+			pn_infer_tn_expr,
 			// postfix-expression: init-list はここで判定する
 			pn.lookAhead( pn.seq([pn_lparen, pn_typename, pn_rparen]), this.at_la_before, this.at_la_after)
 				.or([
@@ -902,16 +913,23 @@ export class parser {
 	 * lookAhead before process
 	 */
 	private at_la_before = (): void => {
-		this._in_lookAhead = true;
-		this._token_queue.pos(0);
+		this._in_lookAhead_stack.push(this._in_lookAhead);
+		if (this._in_lookAhead == false) {
+			this._in_lookAhead = true;
+			this._token_queue.pos(0);
+		}
 	}
 	/**
 	 * action:
 	 * lookAhead after process
 	 */
 	private at_la_after = (): void => {
-		this._in_lookAhead = false;
-		this._token_queue.pos(0);
+		let temp = this._in_lookAhead_stack.pop();
+		if (!temp) temp = false;
+		this._in_lookAhead = temp;
+		if (this._in_lookAhead == false) {
+			this._token_queue.pos(0);
+		}
 	}
 
 	/**

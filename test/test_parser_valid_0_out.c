@@ -1,3 +1,5 @@
+////[left_paren][identifier][right_paren][left_paren][octal_constant][right_paren][semicolon][NEWLINE]
+    (           hoge_t      )            (           0               )            ;          
 ////[left_paren][string_literal][right_paren][semicolon][NEWLINE]
     (           "hoge"          )            ;          
 ////[WHITESPACE][left_paren][left_paren][string_literal][right_paren][right_paren][semicolon][NEWLINE]

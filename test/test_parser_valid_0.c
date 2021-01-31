@@ -1,3 +1,4 @@
+(hoge_t)(0);
 ("hoge");
  (("fuga"));
 (int)(hoge);
