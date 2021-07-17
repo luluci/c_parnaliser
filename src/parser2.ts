@@ -137,6 +137,8 @@ type parse_state =
 	| 'unary-expression'					// unary-expression
 	// (6.5.3) unary-operator: one of
 	| 'unary-operator'						// unary-operator
+	// (6.5.14) logical-OR-expression:
+	| 'logical-OR-expression'
 	// (6.5.16) assignment-expression:
 	| 'assignment-expression'				// assignment-expression
 	// (*) expression utility
@@ -156,8 +158,22 @@ type parse_state =
 	// (6.7.2.2) enumerator:
 	// (6.7.3) type-qualifier:
 	| 'type-qualifier'
+	// (6.7.5) pointer:
+	| 'pointer'
+	// (6.7.5) type-qualifier-list:
+	| 'type-qualifier-list'
+	// (6.7.5) parameter-type-list:
+	| 'parameter-type-list'
+	// (6.7.5) parameter-list:
+	| 'parameter-list'
+	// (6.7.5) parameter-declaration:
+	| 'parameter-declaration'
 	// (6.7.6) type-name:
 	| 'type-name'
+	// (6.7.6) abstract-declarator:
+	| 'abstract-declarator'
+	// (6.7.6) direct-abstract-declarator:
+	| 'direct-abstract-declarator'
 	// (6.7.8) initializer-list:
 	| 'initializer-list'
 
@@ -187,9 +203,6 @@ type parse_state =
 	| 'declarator_var'					// variable declarator
 	| 'declarator_func'					// function declarator
 	| 'direct-declarator'				// direct-declarator
-	| 'pointer'							// pointer
-	| 'parameter-type-list'				// parameter-type-list
-	| 'parameter-declaration'			// parameter-declaration
 	| 'identifier-list'					// identifier-list
 	| 'abstract-declarator'
 	| 'typedef-name'					// typedefで定義されたユーザ定義型
@@ -296,7 +309,6 @@ type parse_state =
 	| 'type-name'								// type-name
 	| 'type-name_sq-list_abst-decl'				// type-name/specifier-qualifier-list -> abstract-declarator
 	| 'type-name_end'							// type-name 解析完了
-	| 'abstract-declarator'						// abstract-declarator
 	| 'abstract-declarator_lp_abst'				// abstract-declarator ( abstract-declarator 
 	| 'abstract-declarator_lp_param'			// abstract-declarator ( parameter-type-list
 	| 'abstract-declarator_lb'					// abstract-declarator [
@@ -681,6 +693,7 @@ export class parser {
 		// A.1 Lexical grammar
 		// A.1.2 Keywords
 		let pn_sizeof = pn.node('sizeof', this.ev_sizeof, this.at_sizeof);
+		let pn_static = pn.node('static', this.ev_static, this.at_static);
 		// A.1.3 Identifiers
 		let pn_id = pn.node('identifier', this.ev_identifier, this.at_identifier);
 		let pn_tn_id = pn.node('type-name', this.ev_identifier, this.at_identifier);		// 未解析type-nameがidentifierと解釈されるケース
@@ -705,7 +718,24 @@ export class parser {
 		let pn_minus = pn.node('minus', this.ev_minus, this.at_minus);
 		let pn_bitw_cmpl_op = pn.node('bitwise_complement_op', this.ev_bitw_cmpl_op, this.at_bitw_cmpl_op);
 		let pn_logic_nega_op = pn.node('logical_negation_op', this.ev_logic_nega_op, this.at_logic_nega_op);
+		let pn_div_op = pn.node('div_op', this.ev_div_op, this.at_div_op);
+		let pn_remain_op = pn.node('remain_op', this.ev_remain_op, this.at_remain_op);
+		let pn_left_shift_op = pn.node('left_shift_op', this.ev_left_shift_op, this.at_left_shift_op);
+		let pn_right_shift_op = pn.node('right_shift_op', this.ev_right_shift_op, this.at_right_shift_op);
+		let pn_lt_op = pn.node('lt_op', this.ev_lt_op, this.at_lt_op);
+		let pn_gt_op = pn.node('gt_op', this.ev_gt_op, this.at_gt_op);
+		let pn_lte_op = pn.node('lte_op', this.ev_lte_op, this.at_lte_op);
+		let pn_gte_op = pn.node('gte_op', this.ev_gte_op, this.at_gte_op);
+		let pn_eq_op = pn.node('equal_op', this.ev_eq_op, this.at_eq_op);
+		let pn_ineq_op = pn.node('inequal_op', this.ev_ineq_op, this.at_ineq_op);
+		let pn_bitw_EXOR_op = pn.node('bitwise_EXOR_op', this.ev_bitw_EXOR_op, this.at_bitw_EXOR_op);
+		let pn_bitw_OR_op = pn.node('bitwise_OR_op', this.ev_bitw_OR_op, this.at_bitw_OR_op);
+		let pn_logic_AND_op = pn.node('logical_AND_op', this.ev_logic_AND_op, this.at_logic_AND_op);
+		let pn_logic_OR_op = pn.node('logical_OR_op', this.ev_logic_OR_op, this.at_logic_OR_op);
+		let pn_cond_op = pn.node('conditional_op', this.ev_cond_op, this.at_cond_op);
+		let pn_colon = pn.node('colon', this.ev_colon, this.at_colon);
 		let pn_semicolon = pn.node('semicolon', this.ev_semicolon, this.at_semicolon);
+		let pn_ellipsis = pn.node('ellipsis', this.ev_ellipsis, this.at_ellipsis);
 		let pn_comma = pn.node('comma', this.ev_comma, this.at_comma);
 		// A.2.1 Expressions
 		// (6.5.1) primary-expression:
@@ -724,12 +754,19 @@ export class parser {
 		let pn_unary_ope = pn.node('unary-operator');
 		// (6.5.4) cast-expression:
 		let pn_cast_expr = pn.node('cast-expression');
+		// (6.5.14) logical-OR-expression:
+		let pn_logical_OR_expr = pn.node('logical-OR-expression');
+		// (6.5.15) conditional-expression:
+		let pn_cond_expr = pn.node('conditional-expression');
 		// (6.5.16) assignment-expression:
 		let pn_assign_expr = pn.node('assignment-expression');
 		// (6.5.17) expression:
-		let pn_expr: parse_node;
+		let pn_expr = pn.root('expression', undefined, this.at_expr, this.pa_expr);
 		// (*) expression utility
-		let pn_typename_in_expr: parse_node;
+		let pn_typename_in_expr = pn.node('typename_in_expr', this.ev_null, this.at_null);
+		// (6.6) constant-expression:
+		let pn_const_expr = pn.node('constant-expression');
+
 		// A.2.2 Declarations
 		// (6.7.2) type-specifier:
 		let pn_type_spec = pn.node('type-specifier');
@@ -738,8 +775,22 @@ export class parser {
 		let pn_spec_qual_list = pn.node('specifier-qualifier-list');
 		// (6.7.3) type-qualifier:
 		let pn_type_qual = pn.node('type-qualifier', this.ev_type_qual, this.at_type_qual);
+		// (6.7.5) pointer:
+		let pn_pointer = pn.node('pointer');
+		// (6.7.5) type-qualifier-list:
+		let pn_type_qual_list = pn.node('type-qualifier-list');
+		// (6.7.5) parameter-type-list:
+		let pn_param_type_list = pn.node('parameter-type-list');
+		// (6.7.5) parameter-list:
+		let pn_param_list = pn.node('parameter-list');
+		// (6.7.5) parameter-declaration:
+		let pn_param_decl = pn.node('parameter-declaration');
 		// (6.7.6) type-name:
 		let pn_typename = pn.node('type-name');
+		// (6.7.6) abstract-declarator:
+		let pn_abst_declarator = pn.node('abstract-declarator');
+		// (6.7.6) direct-abstract-declarator:
+		let pn_direct_abst_declarator = pn.node('direct-abstract-declarator');
 		// (6.7.8) initializer-list:
 		let pn_init_list = pn.node('initializer-list');
 	
@@ -754,9 +805,6 @@ export class parser {
 
 		// 解析ツリー作成
 		// A.2.1 Expressions
-		pn_expr = pn.root('expression', undefined, this.at_expr, this.pa_expr);
-		// (*) expression utility
-		pn_typename_in_expr = pn.node('typename_in_expr', this.ev_null, this.at_null);
 		// (6.5.1) primary-expression:
 		pn_primary_expr_else = pn.else('primary-expression_error', this.at_com_err_not_stop);
 		pn_primary_expr = pn.node('primary-expression', undefined, this.at_prim_expr, this.pa_prim_expr)
@@ -822,7 +870,7 @@ export class parser {
 		let pn_infer_tn_expr = pn.lookAhead(pn.seq([pn_lparen, pn_tn_id, pn_rparen, pn_cast_expr]), this.at_la_before, this.at_la_after);
 		let pn_infer_tn_init = pn.lookAhead(pn.seq([pn_lparen, pn_tn_id, pn_rparen, pn_lbrace]), this.at_la_before, this.at_la_after)
 									.seq([pn_init_list]).opt(pn_comma).seq([pn_rbrace]);
-		// 
+		// (6.5.4) cast-expression:
 		pn_cast_expr.or([
 			pn_infer_tn_init,
 			pn_infer_tn_expr,
@@ -833,9 +881,44 @@ export class parser {
 					pn_cast_expr,
 				]),
 			pn_unary_expr,
-		])
+		]);
+		// cast～logical-ORまで簡易表現で省略
+		// (6.5.14) logical-OR-expression:
+		pn_logical_OR_expr.seq([pn_cast_expr]).many(pn.seq([
+			pn.or([
+				pn_aster,
+				pn_div_op,
+				pn_remain_op,
+				pn_plus,
+				pn_minus,
+				pn_left_shift_op,
+				pn_right_shift_op,
+				pn_lt_op,
+				pn_gt_op,
+				pn_lte_op,
+				pn_gte_op,
+				pn_eq_op,
+				pn_ineq_op,
+				pn_amp,
+				pn_bitw_EXOR_op,
+				pn_bitw_OR_op,
+				pn_logic_AND_op,
+				pn_logic_OR_op
+			]),
+			pn_cast_expr
+		]));
+		// (6.5.15) conditional-expression:
+		pn_cond_expr.seq([pn_logical_OR_expr]).opt(pn.seq([
+			pn_cond_op, pn_expr, pn_colon, pn_cond_expr
+		]))
 		// (6.5.17) expression:
-		pn_expr.seq([pn_primary_expr]);
+		pn_expr.seq([pn_cond_expr]).opt(pn.seq([
+			pn_comma, pn_cond_expr
+		]));
+		// (6.6) constant-expression:
+		pn_const_expr = pn_cond_expr;
+
+
 		// A.2.2 Declarations
 		// (6.7.2) type-specifier:
 		pn_type_spec.or([
@@ -849,8 +932,51 @@ export class parser {
 				pn_type_qual,
 			])
 		);
+		// (6.7.5) pointer:
+		pn_pointer.many1(
+			pn.seq([pn_aster]).opt(pn_type_qual_list)
+		);
+		// (6.7.5) type-qualifier-list:
+		pn_type_qual_list.many1(
+			pn_type_qual
+		);
+		// (6.7.5) parameter-type-list:
+		pn_param_type_list.seq([pn_param_list]).opt(pn.seq([pn_comma, pn_ellipsis]));
+		// (6.7.5) parameter-list:
+		pn_param_list.seq([pn_param_decl]).opt(pn.seq([pn_comma, pn_param_decl]));
+		// (6.7.5) parameter-declaration:
+		pn_param_decl.seq([pn_decl_spec]).opt(
+			pn.or([
+				pn_declarator,
+				pn_abst_declarator
+			])
+		);
 		// (6.7.6) type-name:
-		pn_typename.seq([pn_spec_qual_list, ]);
+		pn_typename.seq([pn_spec_qual_list]).opt(pn_abst_declarator);
+		// (6.7.6) abstract-declarator:
+		pn_abst_declarator.or([
+			pn_direct_abst_declarator,
+			pn.seq([pn_pointer]).opt(pn_direct_abst_declarator),
+		]);
+		// (6.7.6) direct-abstract-declarator:
+		pn_direct_abst_declarator.or([
+			// ( 開始
+			pn.seq([pn_lparen, pn_rparen]),
+			pn.seq([pn_lparen]).or([
+				pn.lookAhead(pn_param_type_list).seq([pn_param_type_list, pn_rparen]),
+				pn.seq([pn_abst_declarator, pn_rparen])
+			]),
+			// [ 開始
+			pn.seq([pn_lbracket, pn_rbracket]),
+			pn.seq([pn_lbracket]).or([
+				pn.seq([pn_aster, pn_rbracket]),
+				pn.seq([pn_static]).opt(pn_type_qual_list).seq([pn_assign_expr, pn_rbracket]),
+				pn.seq([pn_type_qual_list]).or([
+					pn.seq([pn_rbracket]),
+					pn.seq([pn_static, pn_assign_expr, pn_rbracket])
+				])
+			]),
+		]);
 		// external-declaration
 		// function-definition / declaration は declaration-specifier まで共通
 		/*
@@ -874,7 +1000,7 @@ export class parser {
 		pn_root
 			.many(
 				pn.or([
-					pn.seq([pn_cast_expr, pn_semicolon]),
+					pn.seq([pn_expr, pn_semicolon]),
 					pn_eof,
 				])
 			);
@@ -977,6 +1103,31 @@ export class parser {
 	 */
 	private at_sizeof = (): void => {
 		this.push_parse_node('sizeof');
+	}
+
+	/**
+	 * event:
+	 * static 状態遷移判定
+	 */
+	private ev_static = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'static':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * static 状態処理
+	 */
+	private at_static = (): void => {
+		this.push_parse_node('static');
 	}
 
 	/**
@@ -1461,6 +1612,406 @@ export class parser {
 
 	/**
 	 * event:
+	 * div_op 状態遷移判定
+	 */
+	private ev_div_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'div_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * div_op 状態処理
+	 */
+	private at_div_op = (): void => {
+		this.push_parse_node('div_op');
+	}
+
+	/**
+	 * event:
+	 * remain_op 状態遷移判定
+	 */
+	private ev_remain_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'remain_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * remain_op 状態処理
+	 */
+	private at_remain_op = (): void => {
+		this.push_parse_node('remain_op');
+	}
+
+	/**
+	 * event:
+	 * left_shift_op 状態遷移判定
+	 */
+	private ev_left_shift_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'left_shift_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * left_shift_op 状態処理
+	 */
+	private at_left_shift_op = (): void => {
+		this.push_parse_node('left_shift_op');
+	}
+
+	/**
+	 * event:
+	 * right_shift_op 状態遷移判定
+	 */
+	private ev_right_shift_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'right_shift_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * right_shift_op 状態処理
+	 */
+	private at_right_shift_op = (): void => {
+		this.push_parse_node('right_shift_op');
+	}
+
+	/**
+	 * event:
+	 * lt_op 状態遷移判定
+	 */
+	private ev_lt_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'lt_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * lt_op 状態処理
+	 */
+	private at_lt_op = (): void => {
+		this.push_parse_node('lt_op');
+	}
+
+	/**
+	 * event:
+	 * gt_op 状態遷移判定
+	 */
+	private ev_gt_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'gt_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * gt_op 状態処理
+	 */
+	private at_gt_op = (): void => {
+		this.push_parse_node('gt_op');
+	}
+
+	/**
+	 * event:
+	 * lte_op 状態遷移判定
+	 */
+	private ev_lte_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'lte_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * lte_op 状態処理
+	 */
+	private at_lte_op = (): void => {
+		this.push_parse_node('lte_op');
+	}
+
+	/**
+	 * event:
+	 * gte_op 状態遷移判定
+	 */
+	private ev_gte_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'gte_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * gte_op 状態処理
+	 */
+	private at_gte_op = (): void => {
+		this.push_parse_node('gte_op');
+	}
+
+	/**
+	 * event:
+	 * equal_op 状態遷移判定
+	 */
+	private ev_eq_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'equal_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * equal_op 状態処理
+	 */
+	private at_eq_op = (): void => {
+		this.push_parse_node('equal_op');
+	}
+
+	/**
+	 * event:
+	 * inequal_op 状態遷移判定
+	 */
+	private ev_ineq_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'inequal_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * inequal_op 状態処理
+	 */
+	private at_ineq_op = (): void => {
+		this.push_parse_node('inequal_op');
+	}
+
+	/**
+	 * event:
+	 * bitwise_EXOR_op 状態遷移判定
+	 */
+	private ev_bitw_EXOR_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'bitwise_EXOR_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * bitwise_EXOR_op 状態処理
+	 */
+	private at_bitw_EXOR_op = (): void => {
+		this.push_parse_node('bitwise_EXOR_op');
+	}
+
+	/**
+	 * event:
+	 * bitwise_OR_op 状態遷移判定
+	 */
+	private ev_bitw_OR_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'bitwise_OR_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * bitwise_OR_op 状態処理
+	 */
+	private at_bitw_OR_op = (): void => {
+		this.push_parse_node('bitwise_OR_op');
+	}
+
+	/**
+	 * event:
+	 * logical_AND_op 状態遷移判定
+	 */
+	private ev_logic_AND_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'logical_AND_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * logical_AND_op 状態処理
+	 */
+	private at_logic_AND_op = (): void => {
+		this.push_parse_node('logical_AND_op');
+	}
+
+	/**
+	 * event:
+	 * logical_OR_op 状態遷移判定
+	 */
+	private ev_logic_OR_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'logical_OR_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * logical_OR_op 状態処理
+	 */
+	private at_logic_OR_op = (): void => {
+		this.push_parse_node('logical_OR_op');
+	}
+
+	/**
+	 * event:
+	 * conditional_op 状態遷移判定
+	 */
+	private ev_cond_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'conditional_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * conditional_op 状態処理
+	 */
+	private at_cond_op = (): void => {
+		this.push_parse_node('conditional_op');
+	}
+
+	/**
+	 * event:
+	 * colon 状態遷移判定
+	 */
+	private ev_colon = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'colon':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * colon 状態処理
+	 */
+	private at_colon = (): void => {
+		this.push_parse_node('colon');
+	}
+
+	/**
+	 * event:
 	 * semicolon 状態遷移判定
 	 */
 	private ev_semicolon = (): boolean => {
@@ -1509,6 +2060,30 @@ export class parser {
 		this.push_parse_node('comma');
 	}
 
+	/**
+	 * event:
+	 * ellipsis 状態遷移判定
+	 */
+	private ev_ellipsis = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'ellipsis':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * ellipsis 状態処理
+	 */
+	private at_ellipsis = (): void => {
+		this.push_parse_node('ellipsis');
+	}
 
 
 	///////////////////////////////////////
