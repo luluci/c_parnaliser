@@ -840,7 +840,7 @@ export class ParseNode<State> {
 		let result: parse_check_result = 'check_undef';
 		let check_result: boolean;
 		// 状態遷移チェック
-		// 自ノードcheck判定
+		// nextノードcheck判定
 		if (next._next != null) {
 			// checkが登録されていたら実施
 			check_result = this._parse_check(next._next);
@@ -854,7 +854,7 @@ export class ParseNode<State> {
 				result = 'check_ng';
 			}
 		} else {
-			// checkが未登録であれば
+			// 末尾であれば
 			result = 'check_undef';
 		}
 		return result;
@@ -950,7 +950,7 @@ export class ParseNode<State> {
 		if (check_result == 'check_undef' || (recur && check_result == 'check_ok')) {
 			check_result = this._parse_check_impl_child_head(next, recur);
 		}
-		// 未確定ならseq判定
+		// 未確定ならnext判定
 		if (check_result == 'check_undef' || (recur && check_result == 'check_ok')) {
 			check_result = this._parse_check_impl_next(next, recur);
 		}
@@ -1015,6 +1015,12 @@ export class ParseNode<State> {
 		let result: boolean = false;
 		// 'node'と同じ処理
 		result = this._parse_check_node(next, recur);
+		// opt自身がマッチしないとき、nextをチェックする
+		if (!result) {
+			if (next._next) {
+				result = this._parse_check_node(next._next, recur);
+			}
+		}
 		return result;
 	}
 	private _parse_check_many(next: ParseNode<State>, recur: boolean = false): boolean {

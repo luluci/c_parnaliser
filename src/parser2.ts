@@ -378,6 +378,7 @@ type parse_state =
 	// Preprocessing directives
 	| 'pp_group_part'							//
 	//
+	| 'debug'
 	| 'null';				// 初期状態
 
 /*
@@ -841,7 +842,7 @@ export class parser {
 
 		// A.2.2 Declarations
 		// (6.7) declaration:
-		let pn_declaration = pn.node('declaration');
+		let pn_declaration = pn.node('declaration', undefined, this.at_declaration, this.pa_declaration);
 		// (6.7) declaration-specifiers:
 		//let pn_decl_spec = pn.node('declaration-specifiers', this.ev_decl_spec, this.at_null);
 		let pn_decl_spec = pn.node('declaration-specifiers');
@@ -914,11 +915,11 @@ export class parser {
 		let pn_designator = pn.node('designator');
 		// A.2.3 Statements
 		// (6.8) statement:
-		let pn_statement = pn.node('statement');
+		let pn_statement = pn.node('statement', undefined, this.at_statement, this.pa_statement);
 		// (6.8.1) labeled-statement:
 		let pn_labeled_statement = pn.node('labeled-statement');
 		// (6.8.2) compound-statement:
-		let pn_compound_statement = pn.node('compound-statement');
+		let pn_compound_statement = pn.node('compound-statement', undefined, this.at_compound_statement, this.pa_compound_statement);
 		// (6.8.2) block-item-list:
 		let pn_block_item_list = pn.node('block-item-list');
 		// (6.8.2) block-item:
@@ -937,13 +938,14 @@ export class parser {
 		// declaration/function-definitionは途中まで同じで、途中で分岐する。
 		// どちらに分岐するか確定した時点でコンテキストを更新する。
 		let pn_extern_decl = pn.node('external-declaration', undefined, this.at_external_decl, this.pa_external_decl);
-		let pn_extern_decl_declaration_1 = pn.node('declaration', undefined, this.at_external_decl_decl);
-		let pn_extern_decl_declaration_2 = pn.node('declaration', undefined, this.at_external_decl_decl);
+		let pn_extern_decl_declaration_1 = pn.node('declaration', undefined, undefined, this.pa_external_decl_decl);
+		let pn_extern_decl_declaration_2 = pn.node('declaration', undefined, undefined, this.pa_external_decl_decl);
 		// (6.9.1) function-definition:
-		let pn_extern_decl_function_def = pn.node('function-definition', undefined, this.at_external_decl_func_def);
+		let pn_extern_decl_function_def = pn.node('function-definition', undefined, undefined, this.pa_external_decl_func_def);
 		// (6.9.1) declaration-list:
 		let pn_decl_list = pn.node('declaration-list');
 
+		let pn_debug = pn.node('debug', this.ev_debug);
 		let pn_root = pn.node('root', this.ev_null, this.at_null);
 		let pn_prepro = pn.node('pp-directive', this.ev_pp, this.at_pp, this.pa_pp);				// preprocessing-directive
 
@@ -1084,7 +1086,7 @@ export class parser {
 
 		// A.2.2 Declarations
 		// (6.7) declaration:
-		pn_declaration.seq([pn_decl_spec])
+		pn_declaration.seq([pn_decl_spec]).opt(pn_init_decl_list).seq([pn_semicolon]);
 		// (6.7) declaration-specifiers:
 		pn_decl_spec.or([
 			// inline 関数宣言
@@ -1174,7 +1176,13 @@ export class parser {
 		// * enumeration-constant == identifier
 		pn_enumerator.seq([pn_id]).opt(pn.seq([pn_simple_assign_op, pn_const_expr]));
 		// (6.7.5) declarator:
-		pn_declarator.opt(pn.seq([pn_pointer])).seq([pn_direct_declarator]);
+		pn_declarator.opt(pn_pointer).seq([pn_direct_declarator]);
+		/*
+		pn_declarator.or([
+			pn.seq([pn_pointer, pn_direct_declarator]),
+			pn.seq([pn_direct_declarator]),
+		]);
+		*/
 		// (6.7.5) direct-declarator:
 		pn_direct_declarator.or([
 			pn_id,
@@ -1290,8 +1298,8 @@ export class parser {
 		pn_block_item_list.many1(pn.seq([pn_block_item]));
 		// (6.8.2) block-item:
 		pn_block_item.or([
+			pn.lookAhead(pn.seq([pn_statement])).seq([pn_statement]),
 			pn_declaration,
-			pn_statement
 		]);
 		// (6.8.3) expression-statement:
 		pn_expr_statement.many1(pn.or([
@@ -3793,6 +3801,57 @@ export class parser {
 	private at_func_spec = (): void => {
 		this.push_parse_node('function-specifier');
 	}
+	
+	/**
+	 * action:
+	 * declaration 状態処理
+	 */
+	private at_declaration = (): void => {
+		// 新規解析ツリーを作成
+		this.push_parse_tree('declaration');
+	}
+	/**
+	 * post-action:
+	 * declaration 状態後処理
+	 */
+	private pa_declaration = (): void => {
+		// 解析終了してツリーを戻る
+		this.pop_parse_tree()
+	}
+
+	/**
+	 * action:
+	 * statement 状態処理
+	 */
+	private at_statement = (): void => {
+		// 新規解析ツリーを作成
+		this.push_parse_tree('statement');
+	}
+	/**
+	 * post-action:
+	 * statement 状態後処理
+	 */
+	private pa_statement = (): void => {
+		// 解析終了してツリーを戻る
+		this.pop_parse_tree()
+	}
+
+	/**
+	 * action:
+	 * compound-statement 状態処理
+	 */
+	private at_compound_statement = (): void => {
+		// 新規解析ツリーを作成
+		this.push_parse_tree('compound-statement');
+	}
+	/**
+	 * post-action:
+	 * compound-statement 状態後処理
+	 */
+	private pa_compound_statement = (): void => {
+		// 解析終了してツリーを戻る
+		this.pop_parse_tree()
+	}
 
 	/**
 	 * action:
@@ -3815,7 +3874,7 @@ export class parser {
 	 * action:
 	 * external-declaration -> declaration 状態処理
 	 */
-	private at_external_decl_decl = (): void => {
+	private pa_external_decl_decl = (): void => {
 		this.set_current_context('declaration');
 	}
 
@@ -3823,7 +3882,7 @@ export class parser {
 	 * action:
 	 * external-declaration -> declaration 状態処理
 	 */
-	private at_external_decl_func_def = (): void => {
+	private pa_external_decl_func_def = (): void => {
 		this.set_current_context('function-definition');
 	}
 
@@ -3911,6 +3970,9 @@ export class parser {
 		this.push_parse_node('pp-directive');
 	}
 
+	private ev_debug = (): boolean => {
+		return true;
+	}
 
 
 	/**

@@ -1,145 +1,181 @@
 {
     "translation-unit(0,0)": {
-        "[left_paren](0,0)": "(",
-        "[identifier](0,1)": "hoge_t",
-        "[right_paren](0,7)": ")",
-        "postfix-expression(0,8)": {
-            "primary-expression(0,8)": {
-                "[left_paren](0,8)": "(",
-                "expression(0,9)": {
-                    "primary-expression(0,9)": {
-                        "[octal_constant](0,9)": "0"
-                    }
-                },
-                "[right_paren](0,10)": ")"
+        "expression(0,0)": {
+            "[left_paren](0,0)": "(",
+            "[identifier](0,1)": "hoge_t",
+            "[right_paren](0,7)": ")",
+            "postfix-expression(0,8)": {
+                "primary-expression(0,8)": {
+                    "[left_paren](0,8)": "(",
+                    "expression(0,9)": {
+                        "postfix-expression(0,9)": {
+                            "primary-expression(0,9)": {
+                                "[octal_constant](0,9)": "0"
+                            }
+                        }
+                    },
+                    "[right_paren](0,10)": ")"
+                }
             }
         },
         "[semicolon](0,11)": ";",
         "[NEWLINE](1,0)": "\r\n",
-        "postfix-expression(1,0)": {
-            "primary-expression(1,0)": {
-                "[left_paren](1,0)": "(",
-                "expression(1,1)": {
-                    "primary-expression(1,1)": {
-                        "[string_literal](1,1)": "\"hoge\""
-                    }
-                },
-                "[right_paren](1,7)": ")"
+        "expression(1,0)": {
+            "postfix-expression(1,0)": {
+                "primary-expression(1,0)": {
+                    "[left_paren](1,0)": "(",
+                    "expression(1,1)": {
+                        "postfix-expression(1,1)": {
+                            "primary-expression(1,1)": {
+                                "[string_literal](1,1)": "\"hoge\""
+                            }
+                        }
+                    },
+                    "[right_paren](1,7)": ")"
+                }
             }
         },
         "[semicolon](1,8)": ";",
         "[NEWLINE](2,0)": "\r\n",
         "[WHITESPACE](2,0)": " ",
-        "postfix-expression(2,1)": {
-            "primary-expression(2,1)": {
-                "[left_paren](2,1)": "(",
-                "expression(2,2)": {
-                    "primary-expression(2,2)": {
-                        "[left_paren](2,2)": "(",
-                        "expression(2,3)": {
-                            "primary-expression(2,3)": {
-                                "[string_literal](2,3)": "\"fuga\""
+        "expression(2,1)": {
+            "postfix-expression(2,1)": {
+                "primary-expression(2,1)": {
+                    "[left_paren](2,1)": "(",
+                    "expression(2,2)": {
+                        "postfix-expression(2,2)": {
+                            "primary-expression(2,2)": {
+                                "[left_paren](2,2)": "(",
+                                "expression(2,3)": {
+                                    "postfix-expression(2,3)": {
+                                        "primary-expression(2,3)": {
+                                            "[string_literal](2,3)": "\"fuga\""
+                                        }
+                                    }
+                                },
+                                "[right_paren](2,9)": ")"
                             }
-                        },
-                        "[right_paren](2,9)": ")"
-                    }
-                },
-                "[right_paren](2,10)": ")"
+                        }
+                    },
+                    "[right_paren](2,10)": ")"
+                }
             }
         },
         "[semicolon](2,11)": ";",
         "[NEWLINE](3,0)": "\r\n",
-        "[left_paren](3,0)": "(",
-        "[int](3,1)": "int",
-        "[right_paren](3,4)": ")",
-        "postfix-expression(3,5)": {
-            "primary-expression(3,5)": {
-                "[left_paren](3,5)": "(",
-                "expression(3,6)": {
-                    "primary-expression(3,6)": {
-                        "[identifier](3,6)": "hoge"
-                    }
-                },
-                "[right_paren](3,10)": ")"
+        "expression(3,0)": {
+            "[left_paren](3,0)": "(",
+            "[int](3,1)": "int",
+            "[right_paren](3,4)": ")",
+            "postfix-expression(3,5)": {
+                "primary-expression(3,5)": {
+                    "[left_paren](3,5)": "(",
+                    "expression(3,6)": {
+                        "postfix-expression(3,6)": {
+                            "primary-expression(3,6)": {
+                                "[identifier](3,6)": "hoge"
+                            }
+                        }
+                    },
+                    "[right_paren](3,10)": ")"
+                }
             }
         },
         "[semicolon](3,11)": ";",
         "[NEWLINE](4,0)": "\r\n",
         "[NEWLINE](5,0)": "\r\n",
-        "postfix-expression(5,0)": {
-            "primary-expression(5,0)": {
-                "[string_literal](5,0)": "\"fuga\""
-            },
-            "[left_bracket](5,6)": "[",
-            "expression(5,7)": {
-                "primary-expression(5,7)": {
-                    "[octal_constant](5,7)": "0"
-                }
-            },
-            "[right_bracket](5,8)": "]",
-            "[WHITESPACE](5,9)": " ",
-            "[left_bracket](5,10)": "[",
-            "expression(5,11)": {
-                "primary-expression(5,11)": {
-                    "[octal_constant](5,11)": "0"
-                }
-            },
-            "[right_bracket](5,12)": "]"
+        "expression(5,0)": {
+            "postfix-expression(5,0)": {
+                "primary-expression(5,0)": {
+                    "[string_literal](5,0)": "\"fuga\""
+                },
+                "[left_bracket](5,6)": "[",
+                "expression(5,7)": {
+                    "postfix-expression(5,7)": {
+                        "primary-expression(5,7)": {
+                            "[octal_constant](5,7)": "0"
+                        }
+                    }
+                },
+                "[right_bracket](5,8)": "]",
+                "[WHITESPACE](5,9)": " ",
+                "[left_bracket](5,10)": "[",
+                "expression(5,11)": {
+                    "postfix-expression(5,11)": {
+                        "primary-expression(5,11)": {
+                            "[octal_constant](5,11)": "0"
+                        }
+                    }
+                },
+                "[right_bracket](5,12)": "]"
+            }
         },
         "[semicolon](5,13)": ";",
         "[NEWLINE](6,0)": "\r\n",
-        "postfix-expression(6,0)": {
-            "primary-expression(6,0)": {
-                "[string_literal](6,0)": "\"hoga\""
-            },
-            "[left_bracket](6,6)": "[",
-            "expression(6,7)": {
-                "primary-expression(6,7)": {
-                    "[decimal_constant](6,7)": "1"
-                }
-            },
-            "[right_bracket](6,8)": "]"
+        "expression(6,0)": {
+            "postfix-expression(6,0)": {
+                "primary-expression(6,0)": {
+                    "[string_literal](6,0)": "\"hoga\""
+                },
+                "[left_bracket](6,6)": "[",
+                "expression(6,7)": {
+                    "postfix-expression(6,7)": {
+                        "primary-expression(6,7)": {
+                            "[decimal_constant](6,7)": "1"
+                        }
+                    }
+                },
+                "[right_bracket](6,8)": "]"
+            }
         },
         "[semicolon](6,9)": ";",
         "[NEWLINE](7,0)": "\r\n",
-        "postfix-expression(7,0)": {
-            "primary-expression(7,0)": {
-                "[identifier](7,0)": "array"
-            },
-            "[left_bracket](7,5)": "[",
-            "expression(7,6)": {
-                "primary-expression(7,6)": {
-                    "[decimal_constant](7,6)": "2"
-                }
-            },
-            "[right_bracket](7,7)": "]"
+        "expression(7,0)": {
+            "postfix-expression(7,0)": {
+                "primary-expression(7,0)": {
+                    "[identifier](7,0)": "array"
+                },
+                "[left_bracket](7,5)": "[",
+                "expression(7,6)": {
+                    "postfix-expression(7,6)": {
+                        "primary-expression(7,6)": {
+                            "[decimal_constant](7,6)": "2"
+                        }
+                    }
+                },
+                "[right_bracket](7,7)": "]"
+            }
         },
         "[semicolon](7,8)": ";",
         "[NEWLINE](8,0)": "\r\n",
-        "[increment_op](8,0)": "++",
-        "[WHITESPACE](8,2)": " ",
-        "[decrement_op](8,3)": "--",
-        "[WHITESPACE](8,5)": " ",
-        "postfix-expression(8,6)": {
-            "primary-expression(8,6)": {
-                "[identifier](8,6)": "var",
-                "[WHITESPACE](8,9)": " "
-            },
-            "[increment_op](8,10)": "++",
-            "[WHITESPACE](8,12)": " ",
-            "[decrement_op](8,13)": "--",
-            "[WHITESPACE](8,15)": " ",
-            "[left_bracket](8,16)": "[",
-            "expression(8,17)": {
-                "primary-expression(8,17)": {
-                    "[octal_constant](8,17)": "0"
-                }
-            },
-            "[right_bracket](8,18)": "]",
-            "[WHITESPACE](8,19)": " ",
-            "[increment_op](8,20)": "++",
-            "[WHITESPACE](8,22)": " ",
-            "[decrement_op](8,23)": "--"
+        "expression(8,0)": {
+            "[increment_op](8,0)": "++",
+            "[WHITESPACE](8,2)": " ",
+            "[decrement_op](8,3)": "--",
+            "[WHITESPACE](8,5)": " ",
+            "postfix-expression(8,6)": {
+                "primary-expression(8,6)": {
+                    "[identifier](8,6)": "var",
+                    "[WHITESPACE](8,9)": " "
+                },
+                "[increment_op](8,10)": "++",
+                "[WHITESPACE](8,12)": " ",
+                "[decrement_op](8,13)": "--",
+                "[WHITESPACE](8,15)": " ",
+                "[left_bracket](8,16)": "[",
+                "expression(8,17)": {
+                    "postfix-expression(8,17)": {
+                        "primary-expression(8,17)": {
+                            "[octal_constant](8,17)": "0"
+                        }
+                    }
+                },
+                "[right_bracket](8,18)": "]",
+                "[WHITESPACE](8,19)": " ",
+                "[increment_op](8,20)": "++",
+                "[WHITESPACE](8,22)": " ",
+                "[decrement_op](8,23)": "--"
+            }
         },
         "[semicolon](8,25)": ";",
         "[NEWLINE](9,0)": "\r\n",
