@@ -148,6 +148,8 @@ type parse_state =
 	// A.2.2 Declarations
 	// (6.7) init-declarator-list:
 	| 'init-declarator-list'
+	// (6.7.1) storage-class-specifier:
+	| 'storage-class-specifier'
 	// (6.7.2) type-specifier:
 	| 'type-specifier'
 	| 'type-specifier_prim'					// 組み込み型
@@ -210,6 +212,13 @@ type parse_state =
 	| 'iteration-statement'
 	// (6.8.6) jump-statement:
 	| 'jump-statement'
+	// A.2.4 External definitions
+	// (6.9) external-declaration:
+	| 'external-declaration'
+	// (6.9.1) function-definition:
+	| 'function-definition'	
+	// (6.9.1) declaration-list:
+	| 'declaration-list'
 
 	| 'root_decl-spec'					//	-> declaration-specifiers
 	| 'root_decl-spec_declarator'		//		-> declarator
@@ -239,8 +248,6 @@ type parse_state =
 	| 'initializer-list'				// initializer-list
 	| 'designation'						// designation
 	| 'designator'						// designator
-	// External definitions
-	| 'function-definition'				// function-definition
 	// Preprocessor directives
 	| 'pp-directive'
 
@@ -836,14 +843,20 @@ export class parser {
 		// (6.7) declaration:
 		let pn_declaration = pn.node('declaration');
 		// (6.7) declaration-specifiers:
-		let pn_decl_spec = pn.node('declaration-specifiers', this.ev_decl_spec, this.at_null);
+		//let pn_decl_spec = pn.node('declaration-specifiers', this.ev_decl_spec, this.at_null);
+		let pn_decl_spec = pn.node('declaration-specifiers');
 		// (6.7) init-declarator-list:
 		let pn_init_decl_list = pn.node('init-declarator-list');
 		// (6.7) init-declarator:
 		let pn_init_decl = pn.node('init-declarator');
+		// (6.7.1) storage-class-specifier:
+		let pn_storage_class_spec = pn.node('storage-class-specifier');
 		// (6.7.2) type-specifier:
 		let pn_type_spec = pn.node('type-specifier');
-		let pn_type_spec_prim = pn.node('type-specifier_prim', this.ev_type_spec_prim, this.at_type_spec_prim);
+		//let pn_type_spec_prim = pn.node('type-specifier_prim', this.ev_type_spec_prim, this.at_type_spec_prim);
+		let pn_type_spec_prim = pn.node('type-specifier');
+		let pn_type_spec_prim_single = pn.node('type-specifier', this.ev_type_spec_prim_single, this.at_type_spec_prim);
+		let pn_type_spec_prim_long = pn.node('type-specifier');
 		// (6.7.2.1) struct-or-union-specifier
 		let pn_struct_union_spec = pn.node('struct-or-union-specifier');
 		// (6.7.2.1) struct-declaration-list:
@@ -919,10 +932,20 @@ export class parser {
 		// (6.8.6) jump-statement:
 		let pn_jump_statement = pn.node('jump-statement');
 
+		// A.2.4 External definitions
+		// (6.9) external-declaration:
+		// declaration/function-definitionは途中まで同じで、途中で分岐する。
+		// どちらに分岐するか確定した時点でコンテキストを更新する。
+		let pn_extern_decl = pn.node('external-declaration', undefined, this.at_external_decl, this.pa_external_decl);
+		let pn_extern_decl_declaration_1 = pn.node('declaration', undefined, this.at_external_decl_decl);
+		let pn_extern_decl_declaration_2 = pn.node('declaration', undefined, this.at_external_decl_decl);
+		// (6.9.1) function-definition:
+		let pn_extern_decl_function_def = pn.node('function-definition', undefined, this.at_external_decl_func_def);
+		// (6.9.1) declaration-list:
+		let pn_decl_list = pn.node('declaration-list');
 
 		let pn_root = pn.node('root', this.ev_null, this.at_null);
-		let pn_prepro = pn.node('pp-directive', this.ev_pp, this.at_null);				// preprocessing-directive
-		let pn_extern_decl = pn.node('statement', this.ev_null, this.at_null);			// external-declaration
+		let pn_prepro = pn.node('pp-directive', this.ev_pp, this.at_pp, this.pa_pp);				// preprocessing-directive
 
 		// 解析ツリー作成
 		// A.2.1 Expressions
@@ -1062,10 +1085,27 @@ export class parser {
 		// A.2.2 Declarations
 		// (6.7) declaration:
 		pn_declaration.seq([pn_decl_spec])
+		// (6.7) declaration-specifiers:
+		pn_decl_spec.or([
+			// inline 関数宣言
+			pn.seq([pn_func_spec]).opt(pn_type_spec).many(pn_storage_class_spec),
+			pn.seq([pn_func_spec]).many(pn_storage_class_spec).opt(pn_type_spec),
+			// 変数宣言
+			pn.many1(pn.or([pn_storage_class_spec, pn_type_qual])).opt(pn_type_spec).many(pn.or([pn_storage_class_spec, pn_type_qual])),
+			pn.seq([pn_type_spec]).many(pn.or([pn_storage_class_spec, pn_type_qual])),
+		]);
 		// (6.7) init-declarator-list:
 		pn_init_decl_list.seq([pn_init_decl]).many(pn.seq([pn_comma, pn_init_decl]));
 		// (6.7) init-declarator:
 		pn_init_decl.seq([pn_declarator]).opt(pn.seq([pn_simple_assign_op, pn_init]));
+		// (6.7.1) storage-class-specifier:
+		pn_storage_class_spec.or([
+			pn_typedef,
+			pn_extern,
+			pn_static,
+			pn_auto,
+			pn_register,
+		]);
 		// (6.7.2) type-specifier:
 		pn_type_spec.or([
 			pn_type_spec_prim,
@@ -1073,6 +1113,31 @@ export class parser {
 			pn_enum_spec,
 			pn_typedef_name,
 		]);
+		pn_type_spec_prim.or([
+			pn.seq([pn_type_spec_prim_single]),
+			pn.or([
+				pn.seq([pn_signed]).or([
+					pn_type_spec_prim_long,
+					pn_char,
+					pn_short,
+					pn_int
+				]),
+				pn.seq([pn_unsigned]).or([
+					pn_type_spec_prim_long,
+					pn_char,
+					pn_short,
+					pn_int
+				]),
+				pn_type_spec_prim_long,
+				pn.or([
+					pn_type_spec_prim_long,
+					pn_char,
+					pn_short,
+					pn_int
+				])
+			])
+		]);
+		pn_type_spec_prim_long.seq([pn_long]).opt(pn.seq([pn_long])).opt(pn.seq([pn_int]));
 		// (6.7.2.1) struct-or-union-specifier
 		pn_struct_union_spec.or([pn_struct, pn_union]).opt(pn.seq([pn_id])).opt(pn.seq([
 			pn_lbrace,
@@ -1267,6 +1332,31 @@ export class parser {
 
 		// external-declaration
 		// function-definition / declaration は declaration-specifier まで共通
+		pn_extern_decl.seq([pn_decl_spec]).or([
+			// ;出現でdeclaration確定
+			//pn.lookAhead(pn.seq([pn_semicolon])).seq([pn_extern_decl_declaration_1]),
+			pn.seq([pn_extern_decl_declaration_1]),
+			// ;以外ではdeclarator出現が共通
+			pn.seq([pn_declarator]).or([
+				// ; , = の出現でdeclaration確定
+				pn.lookAhead(pn.or([
+					pn_semicolon,
+					pn_comma,
+					pn_simple_assign_op
+				])).seq([pn_extern_decl_declaration_2]),
+				// ここまでに当てはまらない場合はfunction-definition確定
+				pn_extern_decl_function_def
+			])
+		]);
+		pn_extern_decl_declaration_1.seq([pn_semicolon]);
+		pn_extern_decl_declaration_2.or([
+			pn.seq([pn_semicolon]),
+			pn.seq([pn_comma, pn_init_decl]).many1(pn.seq([pn_comma, pn_init_decl])).seq([pn_semicolon]),
+			pn.seq([pn_simple_assign_op, pn_init]).many(pn.seq([pn_comma, pn_init_decl])).seq([pn_semicolon]),
+		]);
+		pn_extern_decl_function_def.opt(pn.seq([pn_decl_list])).seq([pn_compound_statement]);
+		// (6.9.1) declaration-list:
+		pn_decl_list.seq([pn_declaration]).many(pn.seq([pn_declaration]));
 		/*
 		pn_extern_decl.seq(pn_decl_spec).or([
 			pn_declarator.seq(pn.opt(pn_decl_list)).seq(pn_compound_state),								// function-definition
@@ -1275,7 +1365,11 @@ export class parser {
 		*/
 		// translation-unit
 		// external-declaration の繰り返し
-		let pn_trans_unit: parse_node = pn.node('translation-unit').many(pn_extern_decl);
+		let pn_trans_unit: parse_node = pn.node('translation-unit');
+		pn_trans_unit.many1(pn.or([
+			pn_prepro,
+			pn_extern_decl,
+		]));
 		// ルート要素定義
 		// prepro-directive or translation-unit の解析を実施
 		/*
@@ -1288,7 +1382,8 @@ export class parser {
 		pn_root
 			.many(
 				pn.or([
-					pn.seq([pn_expr, pn_semicolon]),
+					//pn.seq([pn_expr, pn_semicolon]),
+					pn_trans_unit,
 					pn_eof,
 				])
 			);
@@ -3555,6 +3650,65 @@ export class parser {
 		return check_result;
 	}
 	/**
+	 * event:
+	 * type-specifier_組み込み型 状態遷移判定
+	 */
+	private ev_type_spec_prim_single = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'void':
+			case 'float':
+			case 'double':
+			case '_Bool':
+			case '_Complex':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * event:
+	 * type-specifier_組み込み型 状態遷移判定
+	 */
+	private ev_type_spec_prim_multi_pre = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'signed':
+			case 'unsigned':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * event:
+	 * type-specifier_組み込み型 状態遷移判定
+	 */
+	private ev_type_spec_prim_multi_post = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'char':
+			case 'short':
+			case 'int':
+			case 'long':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
 	 * action:
 	 * type-specifier_組み込み型 状態処理
 	 */
@@ -3642,6 +3796,39 @@ export class parser {
 
 	/**
 	 * action:
+	 * external-declaration 状態処理
+	 */
+	private at_external_decl = (): void => {
+		// 新規解析ツリーを作成
+		this.push_parse_tree('external-declaration');
+	}
+	/**
+	 * post-action:
+	 * external-declaration 状態後処理
+	 */
+	private pa_external_decl = (): void => {
+		// 解析終了してツリーを戻る
+		this.pop_parse_tree()
+	}
+
+	/**
+	 * action:
+	 * external-declaration -> declaration 状態処理
+	 */
+	private at_external_decl_decl = (): void => {
+		this.set_current_context('declaration');
+	}
+
+	/**
+	 * action:
+	 * external-declaration -> declaration 状態処理
+	 */
+	private at_external_decl_func_def = (): void => {
+		this.set_current_context('function-definition');
+	}
+
+	/**
+	 * action:
 	 * common error, not stop
 	 */
 	private at_com_err_not_stop = (states: parse_state[]): void => {
@@ -3653,7 +3840,7 @@ export class parser {
 
 
 	// preprocessing-directive
-	private ev_pp(): boolean {
+	private ev_pp = (): boolean => {
 		// 必ずdeclaration-specifiersから始まる。
 		// ただし、pp-directivesの処理をしていないのでここで登場する。
 		switch (this.get_token_id()) {
@@ -3679,6 +3866,24 @@ export class parser {
 
 		return false;
 	}
+	/**
+	 * action:
+	 * primary-expression 状態処理
+	 */
+	private at_pp = (): void => {
+		// 新規解析ツリーを作成
+		this.push_parse_tree('pp-directive');
+		this.push_parse_node('pp-directive');
+	}
+	/**
+	 * post-action:
+	 * primary-expression 状態後処理
+	 */
+	private pa_pp = (): void => {
+		// 解析終了してツリーを戻る
+		this.pop_parse_tree()
+	}
+
 	// declaration-specifiers
 	private ev_decl_spec(): boolean {
 		if (this.is_declaration_token()) {
@@ -4427,20 +4632,6 @@ export class parser {
 	}
 
 	/**
-	 * 現在解析中のコンテキストが確定したときにコールする。
-	 * 対象解析ツリーのコンテキストを設定する。
-	 * @param ctx 
-	 */
-	private set_current_context(ctx: parse_state) {
-		this.tgt_node.state = ctx;
-	}
-	private set_current_context_error(err: parse_error_info) {
-		this.tgt_node.err_info = err;
-	}
-	private set_current_context_is_typedef(flag: boolean = true) {
-		this.tgt_node.is_typedef = flag;
-	}
-	/**
 	 * 構文未確定で解析を進め、構文が確定したタイミングで、過去tokenに対してctx(,error)を設定する。
 	 * 現在tokenはまだpushしていない状況で使用する。
 	 * （使用状況イメージ：　this.tgt_node.child==以前までのtoken, this.token_stack==現在以降のtoken）
@@ -4470,6 +4661,20 @@ export class parser {
 		new_len = this.tgt_node.child.push(this.get_new_tree(ctx, err_info_));
 		this.tgt_node.child[new_len - 1].parent = this.tgt_node;
 		this.tgt_node = this.tgt_node.child[new_len - 1];
+	}
+	/**
+	 * 現在解析中のコンテキストが確定したときにコールする。
+	 * 対象解析ツリーのコンテキストを設定する。
+	 * @param ctx 
+	 */
+	private set_current_context(ctx: parse_state) {
+		this.tgt_node.state = ctx;
+	}
+	private set_current_context_error(err: parse_error_info) {
+		this.tgt_node.err_info = err;
+	}
+	private set_current_context_is_typedef(flag: boolean = true) {
+		this.tgt_node.is_typedef = flag;
 	}
 	private pop_parse_tree(): parse_tree_node | null {
 		let curr_node: parse_tree_node | null;

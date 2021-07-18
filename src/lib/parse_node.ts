@@ -50,6 +50,13 @@ export class ParseNodeGenerator<State> {
 		return this._node;
 	}
 
+	public many1(node: ParseNode<State>): ParseNode<State> {
+		// many1ノードを生成
+		// 引数で渡されたノードへの参照をchildとする。
+		this._node = ParseNode.many1<State>(node);
+		return this._node;
+	}
+
 	public lookAhead(child: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
 		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
 		this._node = ParseNode.lookAhead(child, action_la_before, action_la_after, action, action_post);
