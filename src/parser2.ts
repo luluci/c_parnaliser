@@ -140,24 +140,39 @@ type parse_state =
 	// (6.5.14) logical-OR-expression:
 	| 'logical-OR-expression'
 	// (6.5.16) assignment-expression:
-	| 'assignment-expression'				// assignment-expression
+	| 'assignment-expression'
+	// (6.5.16) assignment-operator:
+	| 'assignment-operator'
 	// (*) expression utility
 	| 'typename_in_expr'					// expression内に出現する "( type-name )" を判定する
 	// A.2.2 Declarations
+	// (6.7) init-declarator-list:
+	| 'init-declarator-list'
 	// (6.7.2) type-specifier:
 	| 'type-specifier'
 	| 'type-specifier_prim'					// 組み込み型
 	// (6.7.2.1) struct-or-union-specifier:
+	| 'struct-or-union-specifier'		// 
 	// (6.7.2.1) struct-or-union:
+	| 'struct-or-union'					// 
 	// (6.7.2.1) struct-declaration-list:
+	| 'struct-declaration-list'			// 
 	// (6.7.2.1) struct-declaration:
+	| 'struct-declaration'				//
+	| 'struct-declarator'				//
+	| 'struct-declarator-list'					// struct-declarator-list(初回)
 	// (6.7.2.1) specifier-qualifier-list:
 	| 'specifier-qualifier-list'
 	// (6.7.2.2) enum-specifier:
+	| 'enum-specifier'					//
 	// (6.7.2.2) enumerator-list:
+	| 'enumerator-list'					//
 	// (6.7.2.2) enumerator:
+	| 'enumerator'						//
 	// (6.7.3) type-qualifier:
 	| 'type-qualifier'
+	// (6.7.4) function-specifier:
+	| 'function-specifier'
 	// (6.7.5) pointer:
 	| 'pointer'
 	// (6.7.5) type-qualifier-list:
@@ -176,6 +191,25 @@ type parse_state =
 	| 'direct-abstract-declarator'
 	// (6.7.8) initializer-list:
 	| 'initializer-list'
+	// A.2.3 Statements
+	// (6.8) statement:
+	| 'statement'						// statement
+		// (6.8.1) labeled-statement:
+	| 'labeled-statement'
+	// (6.8.2) compound-statement:
+	| 'compound-statement'
+	// (6.8.2) block-item-list:
+	| 'block-item-list'
+	// (6.8.2) block-item:
+	| 'block-item'
+	// (6.8.3) expression-statement:
+	| 'expression-statement'
+	// (6.8.4) selection-statement:
+	| 'selection-statement'
+	// (6.8.5) iteration-statement:
+	| 'iteration-statement'
+	// (6.8.6) jump-statement:
+	| 'jump-statement'
 
 	| 'root_decl-spec'					//	-> declaration-specifiers
 	| 'root_decl-spec_declarator'		//		-> declarator
@@ -194,11 +228,6 @@ type parse_state =
 	| 'declaration_dont_declare'
 	| 'declaration-specifier'
 	| 'init-declarator'					// init-declarator
-	| 'struct-or-union-specifier'		// 
-	| 'struct-or-union'					// 
-	| 'struct-declaration-list'			// 
-	| 'struct-declarator'				//
-	| 'enum-specifier'					//
 	| 'declarator'						// declarator: variable or functin decl
 	| 'declarator_var'					// variable declarator
 	| 'declarator_func'					// function declarator
@@ -210,14 +239,6 @@ type parse_state =
 	| 'initializer-list'				// initializer-list
 	| 'designation'						// designation
 	| 'designator'						// designator
-	// Statements
-	| 'statement'						// statement
-	| 'labeled-statement'
-	| 'expression-statement'
-	| 'compound-statement'				// compound-statement
-	| 'selection-statement'
-	| 'iteration-statement'
-	| 'jump-statement'
 	// External definitions
 	| 'function-definition'				// function-definition
 	// Preprocessor directives
@@ -284,8 +305,6 @@ type parse_state =
 	| 'sq-list'									// specifier-qualifier-list(初回)
 	| 'sq-list_re'								// specifier-qualifier-list(2回目以降)
 	| 'struct-or-union-spec'					// struct-or-union-specifier
-	| 'struct-declaration-list'					// struct-declaration-list
-	| 'struct-declarator-list'					// struct-declarator-list(初回)
 	| 'struct-declarator-list_re'				// struct-declarator-list(2回目以降)
 	| 'enum-spec'								// enum-specifier
 	| 'enum-spec_lb'							//	-> { enum-list
@@ -692,13 +711,46 @@ export class parser {
 		let pn_eof = pn.eop('EOF', this.ev_eof, this.at_eof);
 		// A.1 Lexical grammar
 		// A.1.2 Keywords
+		let pn_auto = pn.node('auto', this.ev_auto, this.at_auto);
+		let pn_break = pn.node('break', this.ev_break, this.at_break);
+		let pn_case = pn.node('case', this.ev_case, this.at_case);
+		let pn_char = pn.node('char', this.ev_char, this.at_char);
+		let pn_const = pn.node('const', this.ev_const, this.at_const);
+		let pn_continue = pn.node('continue', this.ev_continue, this.at_continue);
+		let pn_default = pn.node('default', this.ev_default, this.at_default);
+		let pn_do = pn.node('do', this.ev_do, this.at_do);
+		let pn_double = pn.node('double', this.ev_double, this.at_double);
+		let pn_else = pn.node('else', this.ev_else, this.at_else);
+		let pn_enum = pn.node('enum', this.ev_enum, this.at_enum);
+		let pn_extern = pn.node('extern', this.ev_extern, this.at_extern);
+		let pn_float = pn.node('float', this.ev_float, this.at_float);
+		let pn_for = pn.node('for', this.ev_for, this.at_for);
+		let pn_goto = pn.node('goto', this.ev_goto, this.at_goto);
+		let pn_if = pn.node('if', this.ev_if, this.at_if);
+		let pn_inline = pn.node('inline', this.ev_inline, this.at_inline);
+		let pn_int = pn.node('int', this.ev_int, this.at_int);
+		let pn_long = pn.node('long', this.ev_long, this.at_long);
+		let pn_register = pn.node('register', this.ev_register, this.at_register);
+		let pn_restrict = pn.node('restrict', this.ev_restrict, this.at_restrict);
+		let pn_return = pn.node('return', this.ev_return, this.at_return);
+		let pn_short = pn.node('short', this.ev_short, this.at_short);
+		let pn_signed = pn.node('signed', this.ev_signed, this.at_signed);
 		let pn_sizeof = pn.node('sizeof', this.ev_sizeof, this.at_sizeof);
 		let pn_static = pn.node('static', this.ev_static, this.at_static);
+		let pn_struct = pn.node('struct', this.ev_struct, this.at_struct);
+		let pn_switch = pn.node('switch', this.ev_switch, this.at_switch);
+		let pn_typedef = pn.node('typedef', this.ev_typedef, this.at_typedef);
+		let pn_union = pn.node('union', this.ev_union, this.at_union);
+		let pn_unsigned = pn.node('unsigned', this.ev_unsigned, this.at_unsigned);
+		let pn_void = pn.node('void', this.ev_void, this.at_void);
+		let pn_volatile = pn.node('volatile', this.ev_volatile, this.at_volatile);
+		let pn_while = pn.node('while', this.ev_while, this.at_while);
+		//let pn_ = pn.node('static', this.ev_, this.at_);
 		// A.1.3 Identifiers
 		let pn_id = pn.node('identifier', this.ev_identifier, this.at_identifier);
 		let pn_tn_id = pn.node('type-name', this.ev_identifier, this.at_identifier);		// 未解析type-nameがidentifierと解釈されるケース
 		// A.1.5 Constants
-		let pn_const = pn.node('constant', this.ev_constant, this.at_constant);
+		let pn_constant = pn.node('constant', this.ev_constant, this.at_constant);
 		// A.1.6 String literals
 		let pn_str_lit = pn.node('string-literal', this.ev_str_lit, this.at_str_lit);
 		// A.1.7 Punctuators
@@ -736,6 +788,17 @@ export class parser {
 		let pn_colon = pn.node('colon', this.ev_colon, this.at_colon);
 		let pn_semicolon = pn.node('semicolon', this.ev_semicolon, this.at_semicolon);
 		let pn_ellipsis = pn.node('ellipsis', this.ev_ellipsis, this.at_ellipsis);
+		let pn_simple_assign_op = pn.node('simple_assign_op', this.ev_simple_assign_op, this.at_simple_assign_op);
+		let pn_mul_assign_op = pn.node('mul_assign_op', this.ev_mul_assign_op, this.at_mul_assign_op);
+		let pn_div_assign_op = pn.node('div_assign_op', this.ev_div_assign_op, this.at_div_assign_op);
+		let pn_remain_assign_op = pn.node('remain_assign_op', this.ev_remain_assign_op, this.at_remain_assign_op);
+		let pn_add_assign_op = pn.node('add_assign_op', this.ev_add_assign_op, this.at_add_assign_op);
+		let pn_sub_assign_op = pn.node('sub_assign_op', this.ev_sub_assign_op, this.at_sub_assign_op);
+		let pn_left_shift_assign_op = pn.node('left_shift_assign_op', this.ev_left_shift_assign_op, this.at_left_shift_assign_op);
+		let pn_right_shift_assign_op = pn.node('right_shift_assign_op', this.ev_right_shift_assign_op, this.at_right_shift_assign_op);
+		let pn_bitw_AND_assign_op = pn.node('bitwise_AND_assign_op', this.ev_bitw_AND_assign_op, this.at_bitw_AND_assign_op);
+		let pn_bitw_EXOR_assign_op = pn.node('bitwise_EXOR_assign_op', this.ev_bitw_EXOR_assign_op, this.at_bitw_EXOR_assign_op);
+		let pn_bitw_OR_assign_op = pn.node('bitwise_OR_assign_op', this.ev_bitw_OR_assign_op, this.at_bitw_OR_assign_op);
 		let pn_comma = pn.node('comma', this.ev_comma, this.at_comma);
 		// A.2.1 Expressions
 		// (6.5.1) primary-expression:
@@ -760,6 +823,8 @@ export class parser {
 		let pn_cond_expr = pn.node('conditional-expression');
 		// (6.5.16) assignment-expression:
 		let pn_assign_expr = pn.node('assignment-expression');
+		// (6.5.16) assignment-operator:
+		let pn_assign_op = pn.node('assignment-operator');
 		// (6.5.17) expression:
 		let pn_expr = pn.root('expression', undefined, this.at_expr, this.pa_expr);
 		// (*) expression utility
@@ -768,13 +833,43 @@ export class parser {
 		let pn_const_expr = pn.node('constant-expression');
 
 		// A.2.2 Declarations
+		// (6.7) declaration:
+		let pn_declaration = pn.node('declaration');
+		// (6.7) declaration-specifiers:
+		let pn_decl_spec = pn.node('declaration-specifiers', this.ev_decl_spec, this.at_null);
+		// (6.7) init-declarator-list:
+		let pn_init_decl_list = pn.node('init-declarator-list');
+		// (6.7) init-declarator:
+		let pn_init_decl = pn.node('init-declarator');
 		// (6.7.2) type-specifier:
 		let pn_type_spec = pn.node('type-specifier');
 		let pn_type_spec_prim = pn.node('type-specifier_prim', this.ev_type_spec_prim, this.at_type_spec_prim);
+		// (6.7.2.1) struct-or-union-specifier
+		let pn_struct_union_spec = pn.node('struct-or-union-specifier');
+		// (6.7.2.1) struct-declaration-list:
+		let pn_struct_decl_list = pn.node('struct-declaration-list');
+		// (6.7.2.1) struct-declaration:
+		let pn_struct_decl = pn.node('struct-declaration');
 		// (6.7.2.1) specifier-qualifier-list:
 		let pn_spec_qual_list = pn.node('specifier-qualifier-list');
+		// (6.7.2.1) struct-declarator-list:
+		let pn_struct_declarator_list = pn.node('struct-declarator-list');
+		// (6.7.2.1) struct-declarator:
+		let pn_struct_declarator = pn.node('struct-declarator');
+		// (6.7.2.2) enum-specifier:
+		let pn_enum_spec = pn.node('enum-specifier');
+		// (6.7.2.2) enumerator-list:
+		let pn_enum_list = pn.node('enumerator-list');
+		// (6.7.2.2) enumerator:
+		let pn_enumerator = pn.node('enumerator');
 		// (6.7.3) type-qualifier:
 		let pn_type_qual = pn.node('type-qualifier', this.ev_type_qual, this.at_type_qual);
+		// (6.7.4) function-specifier:
+		let pn_func_spec = pn.node('function-specifier', this.ev_func_spec, this.at_func_spec);
+		// (6.7.5) declarator:
+		let pn_declarator = pn.node('declarator');
+		// (6.7.5) direct-declarator:
+		let pn_direct_declarator = pn.node('direct-declarator');
 		// (6.7.5) pointer:
 		let pn_pointer = pn.node('pointer');
 		// (6.7.5) type-qualifier-list:
@@ -785,23 +880,49 @@ export class parser {
 		let pn_param_list = pn.node('parameter-list');
 		// (6.7.5) parameter-declaration:
 		let pn_param_decl = pn.node('parameter-declaration');
+		// (6.7.5) identifier-list:
+		let pn_id_list = pn.node('identifier-list');
 		// (6.7.6) type-name:
 		let pn_typename = pn.node('type-name');
 		// (6.7.6) abstract-declarator:
 		let pn_abst_declarator = pn.node('abstract-declarator');
 		// (6.7.6) direct-abstract-declarator:
 		let pn_direct_abst_declarator = pn.node('direct-abstract-declarator');
+		// (6.7.7) typedef-name:
+		let pn_typedef_name = pn.node('typedef-name', this.ev_typedef_name, this.at_typedef_name);
+		// (6.7.8) initializer:
+		let pn_init = pn.node('initializer');
 		// (6.7.8) initializer-list:
 		let pn_init_list = pn.node('initializer-list');
-	
+		let pn_init_list_node = pn.node('initializer-list');
+		// (6.7.8) designation:
+		let pn_designation = pn.node('designation');
+		// (6.7.8) designator:
+		let pn_designator = pn.node('designator');
+		// A.2.3 Statements
+		// (6.8) statement:
+		let pn_statement = pn.node('statement');
+		// (6.8.1) labeled-statement:
+		let pn_labeled_statement = pn.node('labeled-statement');
+		// (6.8.2) compound-statement:
+		let pn_compound_statement = pn.node('compound-statement');
+		// (6.8.2) block-item-list:
+		let pn_block_item_list = pn.node('block-item-list');
+		// (6.8.2) block-item:
+		let pn_block_item = pn.node('block-item');
+		// (6.8.3) expression-statement:
+		let pn_expr_statement = pn.node('expression-statement');
+		// (6.8.4) selection-statement:
+		let pn_select_statement = pn.node('selection-statement');
+		// (6.8.5) iteration-statement:
+		let pn_iter_statement = pn.node('iteration-statement');
+		// (6.8.6) jump-statement:
+		let pn_jump_statement = pn.node('jump-statement');
+
+
 		let pn_root = pn.node('root', this.ev_null, this.at_null);
 		let pn_prepro = pn.node('pp-directive', this.ev_pp, this.at_null);				// preprocessing-directive
 		let pn_extern_decl = pn.node('statement', this.ev_null, this.at_null);			// external-declaration
-		let pn_decl_spec = pn.node('declaration-specifiers', this.ev_decl_spec, this.at_null);		// declaration-specifiers
-		let pn_init_decl_list = pn.node('statement', this.ev_null, this.at_null);		// init-declarator-list
-		let pn_declarator = pn.node('statement', this.ev_null, this.at_null);			// declarator
-		let pn_decl_list = pn.node('statement', this.ev_null, this.at_null);				// declaration-list
-		let pn_compound_state = pn.node('statement', this.ev_null, this.at_null);		// compound-statement
 
 		// 解析ツリー作成
 		// A.2.1 Expressions
@@ -810,7 +931,7 @@ export class parser {
 		pn_primary_expr = pn.node('primary-expression', undefined, this.at_prim_expr, this.pa_prim_expr)
 			.or([
 				pn_id,
-				pn_const,
+				pn_constant,
 				pn_str_lit,
 				// ( expr ) はcast-exprと競合があるため注意
 				pn.seq([pn_lparen, pn_expr, pn_rparen]).else(pn_primary_expr_else),
@@ -903,33 +1024,114 @@ export class parser {
 				pn_bitw_EXOR_op,
 				pn_bitw_OR_op,
 				pn_logic_AND_op,
-				pn_logic_OR_op
+				pn_logic_OR_op,
 			]),
 			pn_cast_expr
 		]));
 		// (6.5.15) conditional-expression:
 		pn_cond_expr.seq([pn_logical_OR_expr]).opt(pn.seq([
 			pn_cond_op, pn_expr, pn_colon, pn_cond_expr
-		]))
+		]));
+		// (6.5.16) assignment-expression:
+		pn_assign_expr.or([
+			pn.lookAhead(pn.seq([pn_unary_expr, pn_assign_op])).seq([pn_unary_expr, pn_assign_op, pn_assign_expr]),
+			pn_cond_expr
+		]);
+		// (6.5.16) assignment-operator:
+		pn_assign_op.or([
+			pn_simple_assign_op,
+			pn_mul_assign_op,
+			pn_div_assign_op,
+			pn_remain_assign_op,
+			pn_add_assign_op,
+			pn_sub_assign_op,
+			pn_left_shift_assign_op,
+			pn_right_shift_assign_op,
+			pn_bitw_AND_assign_op,
+			pn_bitw_EXOR_assign_op,
+			pn_bitw_OR_assign_op,
+		]);
 		// (6.5.17) expression:
-		pn_expr.seq([pn_cond_expr]).opt(pn.seq([
-			pn_comma, pn_cond_expr
+		pn_expr.seq([pn_assign_expr]).opt(pn.seq([
+			pn_comma, pn_assign_expr
 		]));
 		// (6.6) constant-expression:
 		pn_const_expr = pn_cond_expr;
 
 
 		// A.2.2 Declarations
+		// (6.7) declaration:
+		pn_declaration.seq([pn_decl_spec])
+		// (6.7) init-declarator-list:
+		pn_init_decl_list.seq([pn_init_decl]).many(pn.seq([pn_comma, pn_init_decl]));
+		// (6.7) init-declarator:
+		pn_init_decl.seq([pn_declarator]).opt(pn.seq([pn_simple_assign_op, pn_init]));
 		// (6.7.2) type-specifier:
 		pn_type_spec.or([
 			pn_type_spec_prim,
-
+			pn_struct_union_spec,
+			pn_enum_spec,
+			pn_typedef_name,
+		]);
+		// (6.7.2.1) struct-or-union-specifier
+		pn_struct_union_spec.or([pn_struct, pn_union]).opt(pn.seq([pn_id])).opt(pn.seq([
+			pn_lbrace,
+			pn_struct_decl_list,
+			pn_rbrace
+		]));
+		// (6.7.2.1) struct-declaration-list:
+		pn_struct_decl_list.many1(pn.seq([pn_struct_decl]));
+		// (6.7.2.1) struct-declaration:
+		pn_struct_decl.seq([
+			pn_spec_qual_list,
+			pn_struct_declarator_list,
+			pn_semicolon
 		]);
 		// (6.7.2.1) specifier-qualifier-list:
 		pn_spec_qual_list.many1(
 			pn.or([
 				pn_type_spec,
 				pn_type_qual,
+			])
+		);
+		// (6.7.2.1) struct-declarator-list:
+		pn_struct_declarator_list.seq([pn_struct_declarator]).many(pn.seq([pn_comma, pn_struct_declarator]));
+		// (6.7.2.1) struct-declarator:
+		pn_struct_declarator.seq([pn_declarator]).opt(pn.seq([pn_colon, pn_const_expr]));
+		// (6.7.2.2) enum-specifier:
+		pn_enum_spec.seq([pn_enum]).opt(pn.seq([pn_id])).opt(pn.seq([
+			pn_lbrace,
+			pn_enum_list
+		]).opt(pn_comma).seq([pn_rbrace]));
+		// (6.7.2.2) enumerator-list:
+		pn_enum_list.seq([pn_enumerator]).many(pn.seq([pn_comma, pn_enumerator]));
+		// (6.7.2.2) enumerator:
+		// * enumeration-constant == identifier
+		pn_enumerator.seq([pn_id]).opt(pn.seq([pn_simple_assign_op, pn_const_expr]));
+		// (6.7.5) declarator:
+		pn_declarator.opt(pn.seq([pn_pointer])).seq([pn_direct_declarator]);
+		// (6.7.5) direct-declarator:
+		pn_direct_declarator.or([
+			pn_id,
+			pn.seq([pn_lparen, pn_declarator, pn_rparen])
+		]).many(
+			pn.or([
+				// [から始まるケース
+				pn.seq([pn_lbracket]).or([
+					pn_rbracket,
+					pn.seq([pn_aster, pn_rbracket]),
+					pn.seq([pn_static]).opt(pn.seq([pn_type_qual_list])).seq([pn_assign_expr, pn_rbracket]),
+					pn.seq([pn_type_qual_list]).or([
+						pn.seq([pn_aster, pn_rbracket]),
+						pn.seq([pn_static, pn_assign_expr, pn_rbracket]),
+					]),
+				]),
+				// (から始まるケース
+				pn.seq([pn_lparen]).or([
+					pn_rparen,
+					pn.seq([pn_param_type_list, pn_rparen]),
+					pn.seq([pn_id_list, pn_rparen])
+				])
 			])
 		);
 		// (6.7.5) pointer:
@@ -951,6 +1153,8 @@ export class parser {
 				pn_abst_declarator
 			])
 		);
+		// (6.7.5) identifier-list:
+		pn_id_list.seq([pn_id]).many(pn.seq([pn_comma, pn_id]));
 		// (6.7.6) type-name:
 		pn_typename.seq([pn_spec_qual_list]).opt(pn_abst_declarator);
 		// (6.7.6) abstract-declarator:
@@ -977,6 +1181,90 @@ export class parser {
 				])
 			]),
 		]);
+		// (6.7.8) initializer:
+		pn_init.or([
+			pn.seq([pn_lbrace, pn_init_list]).opt(pn_comma).seq([pn_rbrace]),
+			pn_assign_expr
+		]);
+		// (6.7.8) initializer-list:
+		pn_init_list_node.or([
+			pn.seq([pn_init]),
+			pn.seq([pn_designation, pn_init])
+		]);
+		pn_init_list.or([
+			pn.seq([pn_init_list_node]).many(pn.seq([pn_comma, pn_init_list_node]))
+		]);
+		// (6.7.8) designation:
+		pn_designation.many1(pn_designator).seq([pn_simple_assign_op]);
+		// (6.7.8) designator:
+		pn_designator.or([
+			pn.seq([pn_lbracket, pn_const_expr, pn_rbracket]),
+			pn.seq([pn_dot, pn_id])
+		]);
+
+
+		// A.2.3 Statements
+		// (6.8) statement:
+		pn_statement.or([
+			pn_labeled_statement,
+			pn_compound_statement,
+			pn_expr_statement,
+			pn_select_statement,
+			pn_iter_statement,
+			pn_jump_statement,
+		]);
+		// (6.8.1) labeled-statement:
+		pn_labeled_statement.or([
+			pn.seq([pn_case, pn_const_expr, pn_colon, pn_statement]),
+			pn.seq([pn_default, pn_colon, pn_statement]),
+			pn.seq([pn_id, pn_colon, pn_statement]),
+		]);
+		// (6.8.2) compound-statement:
+		pn_compound_statement.seq([pn_lbrace]).opt(pn.seq([pn_block_item_list])).seq([pn_rbrace]);
+		// (6.8.2) block-item-list:
+		pn_block_item_list.many1(pn.seq([pn_block_item]));
+		// (6.8.2) block-item:
+		pn_block_item.or([
+			pn_declaration,
+			pn_statement
+		]);
+		// (6.8.3) expression-statement:
+		pn_expr_statement.many1(pn.or([
+			pn_semicolon,
+			pn.seq([pn_expr, pn_semicolon])
+		]));
+		// (6.8.4) selection-statement:
+		pn_select_statement.or([
+			pn.seq([pn_if, pn_lparen, pn_expr, pn_rparen, pn_statement]).opt(pn.seq([pn_else, pn_statement])),
+			pn.seq([pn_switch, pn_lparen, pn_expr, pn_rparen, pn_statement])
+		]);
+		// (6.8.5) iteration-statement:
+		pn_iter_statement.or([
+			pn.seq([pn_while, pn_lparen, pn_expr, pn_rparen, pn_statement]),
+			pn.seq([pn_do, pn_statement, pn_while, pn_lparen, pn_expr, pn_rparen, pn_semicolon]),
+			pn.seq([pn_for, pn_lparen]).or([
+				pn_declaration,
+				pn_semicolon,
+				pn.seq([pn_expr, pn_semicolon])
+			]).or([
+				pn_semicolon,
+				pn.seq([pn_expr, pn_semicolon])
+			]).or([
+				pn_rparen,
+				pn.seq([pn_expr, pn_rparen])
+			]).seq([pn_statement]),
+		]);
+		// (6.8.6) jump-statement:
+		pn_jump_statement.or([
+			pn.seq([pn_goto, pn_id, pn_semicolon]),
+			pn.seq([pn_continue, pn_semicolon]),
+			pn.seq([pn_break, pn_semicolon]),
+			pn.seq([pn_return]).or([
+				pn_semicolon,
+				pn.seq([pn_expr, pn_semicolon])
+			]),
+		]);
+
 		// external-declaration
 		// function-definition / declaration は declaration-specifier まで共通
 		/*
@@ -1082,6 +1370,606 @@ export class parser {
 	///////////////////////////////////////
 	/**
 	 * event:
+	 * auto 状態遷移判定
+	 */
+	private ev_auto = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'auto':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * auto 状態処理
+	 */
+	private at_auto = (): void => {
+		this.push_parse_node('auto');
+	}
+
+	/**
+	 * event:
+	 * break 状態遷移判定
+	 */
+	private ev_break = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'break':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * break 状態処理
+	 */
+	private at_break = (): void => {
+		this.push_parse_node('break');
+	}
+
+	/**
+	 * event:
+	 * case 状態遷移判定
+	 */
+	private ev_case = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'case':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * case 状態処理
+	 */
+	private at_case = (): void => {
+		this.push_parse_node('case');
+	}
+
+	/**
+	 * event:
+	 * char 状態遷移判定
+	 */
+	private ev_char = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'char':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * char 状態処理
+	 */
+	private at_char = (): void => {
+		this.push_parse_node('char');
+	}
+
+	/**
+	 * event:
+	 * const 状態遷移判定
+	 */
+	private ev_const = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'const':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * const 状態処理
+	 */
+	private at_const = (): void => {
+		this.push_parse_node('const');
+	}
+
+	/**
+	 * event:
+	 * continue 状態遷移判定
+	 */
+	private ev_continue = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'continue':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * continue 状態処理
+	 */
+	private at_continue = (): void => {
+		this.push_parse_node('continue');
+	}
+
+	/**
+	 * event:
+	 * default 状態遷移判定
+	 */
+	private ev_default = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'default':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * default 状態処理
+	 */
+	private at_default = (): void => {
+		this.push_parse_node('default');
+	}
+
+	/**
+	 * event:
+	 * do 状態遷移判定
+	 */
+	private ev_do = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'do':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * do 状態処理
+	 */
+	private at_do = (): void => {
+		this.push_parse_node('do');
+	}
+
+	/**
+	 * event:
+	 * double 状態遷移判定
+	 */
+	private ev_double = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'double':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * double 状態処理
+	 */
+	private at_double = (): void => {
+		this.push_parse_node('double');
+	}
+
+	/**
+	 * event:
+	 * else 状態遷移判定
+	 */
+	private ev_else = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'else':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * else 状態処理
+	 */
+	private at_else = (): void => {
+		this.push_parse_node('else');
+	}
+
+	/**
+	 * event:
+	 * enum 状態遷移判定
+	 */
+	private ev_enum = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'enum':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * enum 状態処理
+	 */
+	private at_enum = (): void => {
+		this.push_parse_node('enum');
+	}
+
+	/**
+	 * event:
+	 * extern 状態遷移判定
+	 */
+	private ev_extern = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'extern':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * extern 状態処理
+	 */
+	private at_extern = (): void => {
+		this.push_parse_node('extern');
+	}
+
+	/**
+	 * event:
+	 * float 状態遷移判定
+	 */
+	private ev_float = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'float':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * float 状態処理
+	 */
+	private at_float = (): void => {
+		this.push_parse_node('float');
+	}
+
+	/**
+	 * event:
+	 * for 状態遷移判定
+	 */
+	private ev_for = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'for':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * for 状態処理
+	 */
+	private at_for = (): void => {
+		this.push_parse_node('for');
+	}
+
+	/**
+	 * event:
+	 * goto 状態遷移判定
+	 */
+	private ev_goto = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'goto':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * goto 状態処理
+	 */
+	private at_goto = (): void => {
+		this.push_parse_node('goto');
+	}
+
+	/**
+	 * event:
+	 * if 状態遷移判定
+	 */
+	private ev_if = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'if':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * if 状態処理
+	 */
+	private at_if = (): void => {
+		this.push_parse_node('if');
+	}
+
+	/**
+	 * event:
+	 * inline 状態遷移判定
+	 */
+	private ev_inline = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'inline':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * inline 状態処理
+	 */
+	private at_inline = (): void => {
+		this.push_parse_node('inline');
+	}
+
+	/**
+	 * event:
+	 * int 状態遷移判定
+	 */
+	private ev_int = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'int':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * int 状態処理
+	 */
+	private at_int = (): void => {
+		this.push_parse_node('int');
+	}
+
+	/**
+	 * event:
+	 * long 状態遷移判定
+	 */
+	private ev_long = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'long':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * long 状態処理
+	 */
+	private at_long = (): void => {
+		this.push_parse_node('long');
+	}
+
+	/**
+	 * event:
+	 * register 状態遷移判定
+	 */
+	private ev_register = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'register':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * register 状態処理
+	 */
+	private at_register = (): void => {
+		this.push_parse_node('register');
+	}
+
+	/**
+	 * event:
+	 * register 状態遷移判定
+	 */
+	private ev_restrict = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'restrict':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * register 状態処理
+	 */
+	private at_restrict = (): void => {
+		this.push_parse_node('restrict');
+	}
+
+	/**
+	 * event:
+	 * return 状態遷移判定
+	 */
+	private ev_return = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'return':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * return 状態処理
+	 */
+	private at_return = (): void => {
+		this.push_parse_node('return');
+	}
+
+	/**
+	 * event:
+	 * short 状態遷移判定
+	 */
+	private ev_short = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'short':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * short 状態処理
+	 */
+	private at_short = (): void => {
+		this.push_parse_node('short');
+	}
+
+	/**
+	 * event:
+	 * signed 状態遷移判定
+	 */
+	private ev_signed = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'signed':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * signed 状態処理
+	 */
+	private at_signed = (): void => {
+		this.push_parse_node('signed');
+	}
+
+	/**
+	 * event:
 	 * sizeof 状態遷移判定
 	 */
 	private ev_sizeof = (): boolean => {
@@ -1128,6 +2016,206 @@ export class parser {
 	 */
 	private at_static = (): void => {
 		this.push_parse_node('static');
+	}
+
+	/**
+	 * event:
+	 * struct 状態遷移判定
+	 */
+	private ev_struct = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'struct':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * struct 状態処理
+	 */
+	private at_struct = (): void => {
+		this.push_parse_node('struct');
+	}
+
+	/**
+	 * event:
+	 * switch 状態遷移判定
+	 */
+	private ev_switch = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'switch':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * switch 状態処理
+	 */
+	private at_switch = (): void => {
+		this.push_parse_node('switch');
+	}
+
+	/**
+	 * event:
+	 * typedef 状態遷移判定
+	 */
+	private ev_typedef = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'typedef':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * typedef 状態処理
+	 */
+	private at_typedef = (): void => {
+		this.push_parse_node('typedef');
+	}
+
+	/**
+	 * event:
+	 * union 状態遷移判定
+	 */
+	private ev_union = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'union':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * union 状態処理
+	 */
+	private at_union = (): void => {
+		this.push_parse_node('union');
+	}
+
+	/**
+	 * event:
+	 * unsigned 状態遷移判定
+	 */
+	private ev_unsigned = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'unsigned':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * unsigned 状態処理
+	 */
+	private at_unsigned = (): void => {
+		this.push_parse_node('unsigned');
+	}
+
+	/**
+	 * event:
+	 * void 状態遷移判定
+	 */
+	private ev_void = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'void':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * void 状態処理
+	 */
+	private at_void = (): void => {
+		this.push_parse_node('void');
+	}
+
+	/**
+	 * event:
+	 * volatile 状態遷移判定
+	 */
+	private ev_volatile = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'volatile':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * volatile 状態処理
+	 */
+	private at_volatile = (): void => {
+		this.push_parse_node('volatile');
+	}
+
+	/**
+	 * event:
+	 * while 状態遷移判定
+	 */
+	private ev_while = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'while':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * while 状態処理
+	 */
+	private at_while = (): void => {
+		this.push_parse_node('while');
 	}
 
 	/**
@@ -2085,6 +3173,281 @@ export class parser {
 		this.push_parse_node('ellipsis');
 	}
 
+	/**
+	 * event:
+	 * simple_assign_op 状態遷移判定
+	 */
+	private ev_simple_assign_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'simple_assign_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * simple_assign_op 状態処理
+	 */
+	private at_simple_assign_op = (): void => {
+		this.push_parse_node('simple_assign_op');
+	}
+
+	/**
+	 * event:
+	 * mul_assign_op 状態遷移判定
+	 */
+	private ev_mul_assign_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'mul_assign_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * mul_assign_op 状態処理
+	 */
+	private at_mul_assign_op = (): void => {
+		this.push_parse_node('mul_assign_op');
+	}
+
+	/**
+	 * event:
+	 * div_assign_op 状態遷移判定
+	 */
+	private ev_div_assign_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'div_assign_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * div_assign_op 状態処理
+	 */
+	private at_div_assign_op = (): void => {
+		this.push_parse_node('div_assign_op');
+	}
+
+	/**
+	 * event:
+	 * remain_assign_op 状態遷移判定
+	 */
+	private ev_remain_assign_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'remain_assign_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * remain_assign_op 状態処理
+	 */
+	private at_remain_assign_op = (): void => {
+		this.push_parse_node('remain_assign_op');
+	}
+
+	/**
+	 * event:
+	 * add_assign_op 状態遷移判定
+	 */
+	private ev_add_assign_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'add_assign_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * add_assign_op 状態処理
+	 */
+	private at_add_assign_op = (): void => {
+		this.push_parse_node('add_assign_op');
+	}
+
+	/**
+	 * event:
+	 * sub_assign_op 状態遷移判定
+	 */
+	private ev_sub_assign_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'sub_assign_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * sub_assign_op 状態処理
+	 */
+	private at_sub_assign_op = (): void => {
+		this.push_parse_node('sub_assign_op');
+	}
+
+	/**
+	 * event:
+	 * left_shift_assign_op 状態遷移判定
+	 */
+	private ev_left_shift_assign_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'left_shift_assign_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * left_shift_assign_op 状態処理
+	 */
+	private at_left_shift_assign_op = (): void => {
+		this.push_parse_node('left_shift_assign_op');
+	}
+
+	/**
+	 * event:
+	 * right_shift_assign_op 状態遷移判定
+	 */
+	private ev_right_shift_assign_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'right_shift_assign_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * right_shift_assign_op 状態処理
+	 */
+	private at_right_shift_assign_op = (): void => {
+		this.push_parse_node('right_shift_assign_op');
+	}
+
+	/**
+	 * event:
+	 * bitwise_AND_assign_op 状態遷移判定
+	 */
+	private ev_bitw_AND_assign_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'bitwise_AND_assign_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * bitwise_AND_assign_op 状態処理
+	 */
+	private at_bitw_AND_assign_op = (): void => {
+		this.push_parse_node('bitwise_AND_assign_op');
+	}
+
+	/**
+	 * event:
+	 * bitwise_EXOR_assign_op 状態遷移判定
+	 */
+	private ev_bitw_EXOR_assign_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'bitwise_EXOR_assign_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * bitwise_EXOR_assign_op 状態処理
+	 */
+	private at_bitw_EXOR_assign_op = (): void => {
+		this.push_parse_node('bitwise_EXOR_assign_op');
+	}
+
+	/**
+	 * event:
+	 * bitwise_OR_assign_op 状態遷移判定
+	 */
+	private ev_bitw_OR_assign_op = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'bitwise_OR_assign_op':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * bitwise_OR_assign_op 状態処理
+	 */
+	private at_bitw_OR_assign_op = (): void => {
+		this.push_parse_node('bitwise_OR_assign_op');
+	}
+
 
 	///////////////////////////////////////
 	// A.2.1 Expressions
@@ -2201,6 +3564,32 @@ export class parser {
 
 	/**
 	 * event:
+	 * typedef-name 状態遷移判定
+	 * 本来はtypedef定義済みのidentifierを受理する
+	 */
+	private ev_typedef_name = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'identifier':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * typedef-name 状態処理
+	 */
+	private at_typedef_name = (): void => {
+		this.push_parse_node('typedef-name');
+	}
+
+	/**
+	 * event:
 	 * type-qualifier 状態遷移判定
 	 */
 	private ev_type_qual = (): boolean => {
@@ -2224,6 +3613,31 @@ export class parser {
 	 */
 	private at_type_qual = (): void => {
 		this.push_parse_node('type-qualifier');
+	}
+
+	/**
+	 * event:
+	 * function-specifier 状態遷移判定
+	 */
+	private ev_func_spec = (): boolean => {
+		let check_result: boolean = false;
+		switch (this.get_token_id()) {
+			case 'inline':
+				check_result = true;
+				this.get_token_next();
+				break;
+			default:
+				check_result = false;
+				break;
+		}
+		return check_result;
+	}
+	/**
+	 * action:
+	 * function-specifier 状態処理
+	 */
+	private at_func_spec = (): void => {
+		this.push_parse_node('function-specifier');
 	}
 
 	/**
