@@ -1347,11 +1347,7 @@ export class parser {
 			// ;以外ではdeclarator出現が共通
 			pn.seq([pn_declarator]).or([
 				// ; , = の出現でdeclaration確定
-				pn.lookAhead(pn.or([
-					pn_semicolon,
-					pn_comma,
-					pn_simple_assign_op
-				])).seq([pn_extern_decl_declaration_2]),
+				pn_extern_decl_declaration_2,
 				// ここまでに当てはまらない場合はfunction-definition確定
 				pn_extern_decl_function_def
 			])
