@@ -15,6 +15,7 @@ type parse_state =
 	| 'root'							// 解析root状態:translation-unit
 	| '@undecided'						// 解析途中で出現したgrammarが未確定
 	| '@WHITESPACE'
+	| '<unnamed>'						// Generatorが生成する無名オブジェクト
 
 	| 'pp-directive'
 	| 'translation-unit'
@@ -712,7 +713,7 @@ export class parser {
 	}
 
 	private make_parse_tree() {
-		let pn = new ParseNodeGenerator<parse_state>();
+		let pn = new ParseNodeGenerator<parse_state>('<unnamed>');
 		type parse_node = ParseNode<parse_state>;
 
 		// node定義
@@ -946,6 +947,9 @@ export class parser {
 		let pn_decl_list = pn.node('declaration-list');
 
 		let pn_debug = pn.node('debug', this.ev_debug);
+		let pn_debug1 = pn.node('debug', this.ev_debug1);
+		let pn_debug2 = pn.node('debug', this.ev_debug2);
+		let pn_debug_not = pn.node('debug', this.ev_debug_not);
 		let pn_root = pn.node('root', this.ev_null, this.at_null);
 		let pn_prepro = pn.node('pp-directive', this.ev_pp, this.at_pp, this.pa_pp);				// preprocessing-directive
 
@@ -1058,8 +1062,9 @@ export class parser {
 			pn_cond_op, pn_expr, pn_colon, pn_cond_expr
 		]));
 		// (6.5.16) assignment-expression:
+		let pn_infer_assign_expr = pn.lookAhead(pn.seq([pn_unary_expr, pn_assign_op]), this.at_la_before, this.at_la_after).seq([pn_assign_expr]);
 		pn_assign_expr.or([
-			pn.lookAhead(pn.seq([pn_unary_expr, pn_assign_op])).seq([pn_unary_expr, pn_assign_op, pn_assign_expr]),
+			pn_infer_assign_expr,
 			pn_cond_expr
 		]);
 		// (6.5.16) assignment-operator:
@@ -1086,7 +1091,8 @@ export class parser {
 
 		// A.2.2 Declarations
 		// (6.7) declaration:
-		pn_declaration.seq([pn_decl_spec]).opt(pn_init_decl_list).seq([pn_semicolon]);
+		//pn_declaration.seq([pn_decl_spec]).opt(pn_init_decl_list).seq([pn_semicolon]);
+		pn_declaration.seq([pn_decl_spec, pn_init_decl_list,  pn_semicolon]);
 		// (6.7) declaration-specifiers:
 		pn_decl_spec.or([
 			// inline 関数宣言
@@ -1236,11 +1242,12 @@ export class parser {
 			pn.seq([pn_pointer]).opt(pn_direct_abst_declarator),
 		]);
 		// (6.7.6) direct-abstract-declarator:
+		let pn_infer_param_list = pn.lookAhead(pn_param_type_list, this.at_la_before, this.at_la_after).seq([pn_param_type_list, pn_rparen]);
 		pn_direct_abst_declarator.or([
 			// ( 開始
 			pn.seq([pn_lparen, pn_rparen]),
 			pn.seq([pn_lparen]).or([
-				pn.lookAhead(pn_param_type_list).seq([pn_param_type_list, pn_rparen]),
+				pn_infer_param_list,
 				pn.seq([pn_abst_declarator, pn_rparen])
 			]),
 			// [ 開始
@@ -1281,31 +1288,41 @@ export class parser {
 		pn_statement.or([
 			pn_labeled_statement,
 			pn_compound_statement,
-			pn_expr_statement,
 			pn_select_statement,
 			pn_iter_statement,
 			pn_jump_statement,
+			pn_expr_statement,
 		]);
 		// (6.8.1) labeled-statement:
+		let pn_infer_label = pn.lookAhead(pn.seq([pn_id, pn_colon, pn_statement]), this.at_la_before, this.at_la_after).seq([pn_statement]);
 		pn_labeled_statement.or([
 			pn.seq([pn_case, pn_const_expr, pn_colon, pn_statement]),
 			pn.seq([pn_default, pn_colon, pn_statement]),
-			pn.seq([pn_id, pn_colon, pn_statement]),
+			pn_infer_label,
 		]);
 		// (6.8.2) compound-statement:
-		pn_compound_statement.seq([pn_lbrace]).opt(pn.seq([pn_block_item_list])).seq([pn_rbrace]);
+		pn_compound_statement.seq([pn_lbrace]).opt(pn_block_item_list).seq([pn_rbrace]);
 		// (6.8.2) block-item-list:
-		pn_block_item_list.many1(pn.seq([pn_block_item]));
+		pn_block_item_list.many1(pn_block_item);
 		// (6.8.2) block-item:
+		/*
+		let pn_infer_statement = pn.lookAhead(pn.seq([pn_statement]), this.at_la_before, this.at_la_after);
 		pn_block_item.or([
-			pn.lookAhead(pn.seq([pn_statement])).seq([pn_statement]),
+			pn_infer_statement,
 			pn_declaration,
 		]);
+		*/
+		//let pn_infer_declaration = pn.lookAhead(pn.seq([pn_decl_spec, pn_init_decl_list, pn_semicolon]), this.at_la_before, this.at_la_after);
+		let pn_infer_declaration = pn.lookAhead(pn_declaration, this.at_la_before_debug, this.at_la_after);
+		pn_block_item.or([
+			pn_infer_declaration,
+			pn_statement,
+		]);
 		// (6.8.3) expression-statement:
-		pn_expr_statement.many1(pn.or([
+		pn_expr_statement.or([
 			pn_semicolon,
 			pn.seq([pn_expr, pn_semicolon])
-		]));
+		]);
 		// (6.8.4) selection-statement:
 		pn_select_statement.or([
 			pn.seq([pn_if, pn_lparen, pn_expr, pn_rparen, pn_statement]).opt(pn.seq([pn_else, pn_statement])),
@@ -1426,6 +1443,13 @@ export class parser {
 	 * lookAhead before process
 	 */
 	private at_la_before = (): void => {
+		this._in_lookAhead_stack.push(this._in_lookAhead);
+		if (this._in_lookAhead == false) {
+			this._in_lookAhead = true;
+			this._token_queue.pos(0);
+		}
+	}
+	private at_la_before_debug = (): void => {
 		this._in_lookAhead_stack.push(this._in_lookAhead);
 		if (this._in_lookAhead == false) {
 			this._in_lookAhead = true;
@@ -3968,6 +3992,18 @@ export class parser {
 
 	private ev_debug = (): boolean => {
 		return true;
+	}
+
+	private ev_debug1 = (): boolean => {
+		return true;
+	}
+
+	private ev_debug2 = (): boolean => {
+		return true;
+	}
+
+	private ev_debug_not = (): boolean => {
+		return false;
 	}
 
 

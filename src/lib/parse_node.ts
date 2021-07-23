@@ -11,9 +11,11 @@ type parse_node_action_else<State> = (states: State[]) => void;
  */
 export class ParseNodeGenerator<State> {
 	private _node: ParseNode<State> | null;
+	private _defaultState: State;
 
-	constructor() {
+	constructor(defaultState: State) {
 		this._node = null;
+		this._defaultState = defaultState;
 	}
 
 	// ParseNode生成関数
@@ -35,31 +37,31 @@ export class ParseNodeGenerator<State> {
 	}
 
 	public seq(nodes: ParseNode<State>[]): ParseNode<State> {
-		this._node = ParseNode.seq<State>(nodes);
+		this._node = ParseNode.seq<State>(this._defaultState, nodes);
 		return this._node;
 	}
 	public or(nodes: ParseNode<State>[]): ParseNode<State> {
-		this._node = ParseNode.or<State>(nodes);
+		this._node = ParseNode.or<State>(this._defaultState, nodes);
 		return this._node;
 	}
 
 	public many(node: ParseNode<State>): ParseNode<State> {
 		// manyノードを生成
 		// 引数で渡されたノードへの参照をchildとする。
-		this._node = ParseNode.many<State>(node);
+		this._node = ParseNode.many<State>(this._defaultState, node);
 		return this._node;
 	}
 
 	public many1(node: ParseNode<State>): ParseNode<State> {
 		// many1ノードを生成
 		// 引数で渡されたノードへの参照をchildとする。
-		this._node = ParseNode.many1<State>(node);
+		this._node = ParseNode.many1<State>(this._defaultState, node);
 		return this._node;
 	}
 
 	public lookAhead(child: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
 		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
-		this._node = ParseNode.lookAhead(child, action_la_before, action_la_after, action, action_post);
+		this._node = ParseNode.lookAhead(this._defaultState, child, action_la_before, action_la_after, action, action_post);
 		return this._node;
 	}
 
@@ -237,12 +239,12 @@ export class ParseNode<State> {
 		}
 		return this;
 	}
-	static seq<State>(nodes: ParseNode<State>[]): ParseNode<State> {
+	static seq<State>(state: State, nodes: ParseNode<State>[]): ParseNode<State> {
 		// 空チェック
 		if (nodes.length == 0) throw new Error("ParseTree:InvalidConstruct:seq() require least one more node.");
 		// seqノードを生成
 		// 引数で渡されたノードへの参照をchildとする。
-		let new_node = new ParseNode<State>(nodes[0]._state)._set_type('seq');
+		let new_node = new ParseNode<State>(state)._set_type('seq');
 		for (let node of nodes) {
 			new_node._child.push(node);
 		}
@@ -250,7 +252,7 @@ export class ParseNode<State> {
 	}
 	private _seq_impl(nodes: ParseNode<State>[]): void {
 		// seqノードを作成
-		let new_node = ParseNode.seq(nodes);
+		let new_node = ParseNode.seq(this._state, nodes);
 		// ノード登録
 		this._next_push(new_node);
 	}
@@ -288,17 +290,17 @@ export class ParseNode<State> {
 	 */
 	public or(child: ParseNode<State>[]): ParseNode<State> {
 		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
-		let node = ParseNode.or(child);
+		let node = ParseNode.or(this._state, child);
 		// ノード登録
 		this._next_push(node);
 		return this;
 	}
-	static or<State>(nodes: ParseNode<State>[]): ParseNode<State> {
+	static or<State>(state: State, nodes: ParseNode<State>[]): ParseNode<State> {
 		// 空チェック
 		if (nodes.length == 0) throw new Error("ParseTree:InvalidConstruct:or() require least one more node.");
 		// orノードを生成
 		// 引数で渡されたノードへの参照をchildとする。
-		let new_node = new ParseNode(nodes[0]._state)._set_type('or');
+		let new_node = new ParseNode(state)._set_type('or');
 		for (let node of nodes) {
 			// 特殊ノード判定
 			if (node._node_type == 'else') {
@@ -318,15 +320,15 @@ export class ParseNode<State> {
 	 */
 	public many(child: ParseNode<State>): ParseNode<State> {
 		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
-		let node = ParseNode.many(child);
+		let node = ParseNode.many(this._state, child);
 		// ノード登録
 		this._next_push(node);
 		return this;
 	}
-	static many<State>(node: ParseNode<State>): ParseNode<State> {
+	static many<State>(state: State, node: ParseNode<State>): ParseNode<State> {
 		// manyノードを生成
 		// 引数で渡されたノードへの参照をchildとする。
-		let new_node = new ParseNode<State>(node._state)._set_type('many');
+		let new_node = new ParseNode<State>(state)._set_type('many');
 		new_node._child.push(node);
 		return new_node;
 	}
@@ -337,15 +339,15 @@ export class ParseNode<State> {
 	 */
 	public many1(child: ParseNode<State>): ParseNode<State> {
 		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
-		let node = ParseNode.many1(child);
+		let node = ParseNode.many1(this._state, child);
 		// ノード登録
 		this._next_push(node);
 		return this;
 	}
-	static many1<State>(node: ParseNode<State>): ParseNode<State> {
+	static many1<State>(state: State, node: ParseNode<State>): ParseNode<State> {
 		// many1ノードを生成
 		// 引数で渡されたノードへの参照をchildとする。
-		let new_node = new ParseNode<State>(node._state)._set_type('many1');
+		let new_node = new ParseNode<State>(state)._set_type('many1');
 		new_node._child.push(node);
 		return new_node;
 	}
@@ -356,14 +358,14 @@ export class ParseNode<State> {
 	 */
 	public lookAhead(child: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
 		// 管理ノードを生成し、引数で渡されたノードへの参照をchildとする。
-		let node = ParseNode.lookAhead(child, action_la_before, action_la_after, action, action_post);
+		let node = ParseNode.lookAhead(this._state, child, action_la_before, action_la_after, action, action_post);
 		// ノード登録
 		this._next_push(node);
 		return this;
 	}
-	static lookAhead<State>(node: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
+	static lookAhead<State>(state: State, node: ParseNode<State>, action_la_before?: parse_node_action, action_la_after?: parse_node_action, action?: parse_node_action, action_post?: parse_node_action): ParseNode<State> {
 		// いずれにもマッチしなかった場合に遷移とするのでcheckは除外する
-		let new_node = new ParseNode<State>(node._state)._set_type('lookAhead');
+		let new_node = new ParseNode<State>(state)._set_type('lookAhead');
 		if (action_la_before) new_node.action_lookAhead_before(action_la_before);
 		if (action_la_after) new_node.action_lookAhead_after(action_la_after);
 		if (action) new_node.action(action);
@@ -953,12 +955,22 @@ export class ParseNode<State> {
 		check_result = this._parse_check_impl_check(next);
 		// 未確定ならchild判定
 		// 再帰判定ではchildまで確認を実施する
-		if (check_result == 'check_undef' || (recur && check_result == 'check_ok')) {
+		if (check_result == 'check_undef') {
 			check_result = this._parse_check_impl_child_head(next, recur);
+		} else if (recur && check_result == 'check_ok') {
+			const recur_check = this._parse_check_impl_child_head(next, recur);
+			if (recur_check == 'check_ng') {
+				check_result = recur_check
+			}
 		}
 		// 未確定ならnext判定
-		if (check_result == 'check_undef' || (recur && check_result == 'check_ok')) {
+		if (check_result == 'check_undef') {
 			check_result = this._parse_check_impl_next(next, recur);
+		} else if (recur && check_result == 'check_ok') {
+			const recur_check = this._parse_check_impl_next(next, recur);
+			if (recur_check == 'check_ng') {
+				check_result = recur_check
+			}
 		}
 		// check結果処理
 		switch (check_result) {
@@ -994,12 +1006,22 @@ export class ParseNode<State> {
 		// 自ノードcheck判定
 		check_result = this._parse_check_impl_check(next);
 		// 未確定ならchild判定
-		if (check_result == 'check_undef' || (recur && check_result == 'check_ok')) {
+		if (check_result == 'check_undef') {
 			check_result = this._parse_check_impl_child_or(next, recur);
+		} else if (recur && check_result == 'check_ok') {
+			const recur_check = this._parse_check_impl_child_or(next, recur);
+			if (recur_check == 'check_ng') {
+				check_result = recur_check;
+			}
 		}
 		// 未確定ならseq判定
-		if (check_result == 'check_undef' || (recur && check_result == 'check_ok')) {
+		if (check_result == 'check_undef') {
 			check_result = this._parse_check_impl_next(next, recur);
+		} else if (recur && check_result == 'check_ok') {
+			const recur_check = this._parse_check_impl_next(next, recur);
+			if (recur_check == 'check_ng') {
+				check_result = recur_check;
+			}
 		}
 		// check結果処理
 		switch (check_result) {
@@ -1019,26 +1041,171 @@ export class ParseNode<State> {
 	}
 	private _parse_check_opt(next: ParseNode<State>, recur: boolean): boolean {
 		let result: boolean = false;
-		// 'node'と同じ処理
-		result = this._parse_check_node(next, recur);
-		// opt自身がマッチしないとき、nextをチェックする
-		if (!result) {
-			if (next._next) {
-				result = this._parse_check_node(next._next, recur);
-			}
+		let check_result: parse_check_result;
+		// 自ノードcheck判定
+		// 自ノードcheckがNGでも、child or nextがOKなら
+		check_result = this._parse_check_impl_check(next);
+		// child判定
+		// 再帰判定ではchildまで確認を実施する
+		switch (check_result) {
+			case 'check_undef':
+			case 'check_ng':
+				check_result = this._parse_check_impl_child_head(next, recur);
+				break;
+			case 'check_ok':
+				if (recur) {
+					const recur_check = this._parse_check_impl_child_head(next, recur);
+					if (recur_check == 'check_ng') {
+						check_result = recur_check
+					}
+				}
+				break;
+			default:
+				// ?
+				break;
+		}
+		// next判定
+		switch (check_result) {
+			case 'check_undef':
+			case 'check_ng':
+				check_result = this._parse_check_impl_next(next, recur);
+				break;
+			case 'check_ok':
+				if (recur) {
+					const recur_check = this._parse_check_impl_next(next, recur);
+					if (recur_check == 'check_ng') {
+						check_result = recur_check
+					}
+				}
+				break;
+			default:
+				// ?
+				break;
+		}
+		// check結果処理
+		switch (check_result) {
+			case 'check_ok':
+				result = true;
+				break;
+			case 'check_ng':
+				result = false;
+				break;
+			//case 'check_undef':
+			default:
+				// nextが空の場合undefにしているが、その場合は末尾到達でOKとなる。
+				result = true;
+				break;
 		}
 		return result;
 	}
 	private _parse_check_many(next: ParseNode<State>, recur: boolean): boolean {
 		let result: boolean = false;
-		// 'node'と同じ処理
-		result = this._parse_check_node(next, recur);
+		let check_result: parse_check_result;
+		// 自ノードcheck判定
+		// 自ノードcheckがNGでも、child or nextがOKなら
+		check_result = this._parse_check_impl_check(next);
+		// child判定
+		// 再帰判定ではchildまで確認を実施する
+		switch (check_result) {
+			case 'check_undef':
+			case 'check_ng':
+				check_result = this._parse_check_impl_child_head(next, recur);
+				break;
+			case 'check_ok':
+				if (recur) {
+					// OKの間はmanyがマッチしているので繰り返す
+					while (check_result === 'check_ok') {
+						check_result = this._parse_check_impl_child_head(next, recur);
+					}
+				}
+				break;
+			default:
+				// ?
+				break;
+		}
+		// next判定
+		switch (check_result) {
+			case 'check_undef':
+			case 'check_ng':
+				check_result = this._parse_check_impl_next(next, recur);
+				break;
+			case 'check_ok':
+				if (recur) {
+					const recur_check = this._parse_check_impl_next(next, recur);
+					if (recur_check == 'check_ng') {
+						check_result = recur_check
+					}
+				}
+				break;
+			default:
+				// ?
+				break;
+		}
+		// check結果処理
+		switch (check_result) {
+			case 'check_ok':
+				result = true;
+				break;
+			case 'check_ng':
+				result = false;
+				break;
+			//case 'check_undef':
+			default:
+				// nextが空の場合undefにしているが、その場合は末尾到達でOKとなる。
+				result = true;
+				break;
+		}
 		return result;
 	}
 	private _parse_check_many1(next: ParseNode<State>, recur: boolean): boolean {
 		let result: boolean = false;
-		// 'node'と同じ処理
-		result = this._parse_check_node(next, recur);
+		let check_result: parse_check_result;
+		// 自ノードcheck判定
+		// 自ノードcheckがNGでも、child or nextがOKなら
+		check_result = this._parse_check_impl_check(next);
+		// child判定
+		if (check_result === 'check_undef') {
+			check_result = this._parse_check_impl_child_head(next, recur);
+		}
+		// 再帰判定では繰り返しマッチを確認する
+		if (recur && check_result === 'check_ok') {
+			let recur_check: parse_check_result;
+			do {
+				recur_check = this._parse_check_impl_child_head(next, recur);
+			} while (recur_check === 'check_ok');
+		}
+		// next判定
+		switch (check_result) {
+			case 'check_undef':
+				check_result = this._parse_check_impl_next(next, recur);
+				break;
+			case 'check_ok':
+				if (recur) {
+					const recur_check = this._parse_check_impl_next(next, recur);
+					if (recur_check == 'check_ng') {
+						check_result = recur_check
+					}
+				}
+				break;
+			case 'check_ng':
+			default:
+				// ?
+				break;
+		}
+		// check結果処理
+		switch (check_result) {
+			case 'check_ok':
+				result = true;
+				break;
+			case 'check_ng':
+				result = false;
+				break;
+			//case 'check_undef':
+			default:
+				// nextが空の場合undefにしているが、その場合は末尾到達でOKとなる。
+				result = true;
+				break;
+		}
 		return result;
 	}
 	/**
