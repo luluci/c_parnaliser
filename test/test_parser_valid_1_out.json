@@ -15,67 +15,103 @@
             "[left_paren](2,8)": "(",
             "[void](2,9)": "void",
             "[right_paren](2,13)": ")",
-            "[WHITESPACE](2,14)": " ",
-            "compound-statement(2,15)": {
-                "[left_brace](2,15)": "{",
-                "[NEWLINE](3,0)": "\r\n",
-                "[WHITESPACE](3,0)": "\t",
-                "declaration(3,1)": {
-                    "[int](3,1)": "int",
-                    "[WHITESPACE](3,4)": " ",
-                    "[identifier](3,5)": "hoge",
-                    "[WHITESPACE](3,9)": " ",
-                    "[simple_assign_op](3,10)": "=",
-                    "[WHITESPACE](3,11)": " ",
-                    "postfix-expression(3,12)": {
-                        "primary-expression(3,12)": {
-                            "[decimal_constant](3,12)": "11"
+            "[NEWLINE](3,0)": "\r\n",
+            "compound-statement(3,0)": {
+                "[left_brace](3,0)": "{",
+                "[NEWLINE](4,0)": "\r\n",
+                "[WHITESPACE](4,0)": "\t",
+                "declaration(4,1)": {
+                    "[int](4,1)": "int",
+                    "[WHITESPACE](4,4)": " ",
+                    "[identifier](4,5)": "hoge",
+                    "[WHITESPACE](4,9)": " ",
+                    "[simple_assign_op](4,10)": "=",
+                    "[WHITESPACE](4,11)": " ",
+                    "postfix-expression(4,12)": {
+                        "primary-expression(4,12)": {
+                            "[decimal_constant](4,12)": "11"
                         }
                     },
-                    "[semicolon](3,14)": ";",
-                    "[NEWLINE](4,0)": "\r\n",
-                    "[WHITESPACE](4,0)": "\t"
+                    "[semicolon](4,14)": ";",
+                    "[NEWLINE](5,0)": "\r\n",
+                    "[WHITESPACE](5,0)": "\t"
                 },
-                "statement(4,1)": {
-                    "[identifier](4,1)": "printf",
-                    "statement(4,7)": {
-                        "expression(4,7)": {
-                            "postfix-expression(4,7)": {
-                                "primary-expression(4,7)": {
-                                    "[left_paren](4,7)": "(",
-                                    "expression(4,8)": {
-                                        "postfix-expression(4,8)": {
-                                            "primary-expression(4,8)": {
-                                                "[string_literal](4,8)": "\"Hi!!\""
-                                            }
-                                        }
-                                    },
-                                    "[right_paren](4,14)": ")"
-                                }
+                "declaration(5,1)": {
+                    "[int](5,1)": "int",
+                    "[WHITESPACE](5,4)": " ",
+                    "[identifier](5,5)": "fuga",
+                    "[semicolon](5,9)": ";",
+                    "[NEWLINE](6,0)": "\r\n",
+                    "[WHITESPACE](6,0)": "\t"
+                },
+                "statement(6,1)": {
+                    "expression(6,1)": {
+                        "postfix-expression(6,1)": {
+                            "primary-expression(6,1)": {
+                                "[decimal_constant](6,1)": "234"
+                            }
+                        }
+                    },
+                    "[semicolon](6,4)": ";",
+                    "[NEWLINE](7,0)": "\r\n",
+                    "[WHITESPACE](7,0)": "\t"
+                },
+                "statement(7,1)": {
+                    "expression(7,1)": {
+                        "postfix-expression(7,1)": {
+                            "primary-expression(7,1)": {
+                                "[identifier](7,1)": "fuga",
+                                "[WHITESPACE](7,5)": " "
                             }
                         },
-                        "[semicolon](4,15)": ";",
-                        "[NEWLINE](5,0)": "\r\n",
-                        "[WHITESPACE](5,0)": "\t"
-                    }
-                },
-                "statement(5,1)": {
-                    "[return](5,1)": "return",
-                    "[WHITESPACE](5,7)": " ",
-                    "expression(5,8)": {
-                        "postfix-expression(5,8)": {
-                            "primary-expression(5,8)": {
-                                "[octal_constant](5,8)": "0"
+                        "[simple_assign_op](7,6)": "=",
+                        "[WHITESPACE](7,7)": " ",
+                        "postfix-expression(7,8)": {
+                            "primary-expression(7,8)": {
+                                "[identifier](7,8)": "hoge"
                             }
                         }
                     },
-                    "[semicolon](5,9)": ";",
-                    "[NEWLINE](6,0)": "\r\n"
+                    "[semicolon](7,12)": ";",
+                    "[NEWLINE](8,0)": "\r\n",
+                    "[WHITESPACE](8,0)": "\t"
                 },
-                "[right_brace](6,0)": "}",
-                "[NEWLINE](7,0)": "\r\n"
+                "statement(8,1)": {
+                    "expression(8,1)": {
+                        "postfix-expression(8,1)": {
+                            "primary-expression(8,1)": {
+                                "[identifier](8,1)": "printf"
+                            },
+                            "[left_paren](8,7)": "(",
+                            "postfix-expression(8,8)": {
+                                "primary-expression(8,8)": {
+                                    "[string_literal](8,8)": "\"Hi!!\""
+                                }
+                            },
+                            "[right_paren](8,14)": ")"
+                        }
+                    },
+                    "[semicolon](8,15)": ";",
+                    "[NEWLINE](9,0)": "\r\n",
+                    "[WHITESPACE](9,0)": "\t"
+                },
+                "statement(9,1)": {
+                    "[return](9,1)": "return",
+                    "[WHITESPACE](9,7)": " ",
+                    "expression(9,8)": {
+                        "postfix-expression(9,8)": {
+                            "primary-expression(9,8)": {
+                                "[octal_constant](9,8)": "0"
+                            }
+                        }
+                    },
+                    "[semicolon](9,9)": ";",
+                    "[NEWLINE](10,0)": "\r\n"
+                },
+                "[right_brace](10,0)": "}",
+                "[NEWLINE](11,0)": "\r\n"
             }
         },
-        "EOF(7,0)": ""
+        "EOF(11,0)": ""
     }
 }

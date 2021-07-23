@@ -970,7 +970,7 @@ export class parser {
 		pn_postfix_expr_1 = pn.node('postfix-expression_1')
 			.or([
 				pn.seq([pn_lbracket, pn_expr, pn_rbracket]).else(pn_postfix_expr_1_else),
-				pn.seq([pn_lparen]).opt(pn_arg_expr_list).seq([pn_rbracket]).else(pn_postfix_expr_1_else),
+				pn.seq([pn_lparen]).opt(pn_arg_expr_list).seq([pn_rparen]).else(pn_postfix_expr_1_else),
 				pn.seq([pn_dot]).seq([pn_id]).else(pn_postfix_expr_1_else),
 				pn.seq([pn_arrow]).seq([pn_id]).else(pn_postfix_expr_1_else),
 				pn_incr,
