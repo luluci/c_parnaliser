@@ -590,7 +590,11 @@ export class ParseNode<State> {
 		} else {
 			// 遷移NG
 			// else処理を実施
-			if (!result) result = this._parse_proc_else_impl(curr, curr._else);
+			if (!result) {
+				if (curr._else != null) {
+					result = this._parse_proc_else_impl(curr, curr._else);
+				}
+			}
 		}
 		// 異常発生時
 		if (!result) {
@@ -705,8 +709,8 @@ export class ParseNode<State> {
 		}
 		return result;
 	}
-	private _parse_proc_else_impl(fail_node: ParseNode<State> | null, else_node: ParseNode<State> | null): boolean {
-		if (else_node && else_node._action_else) {
+	private _parse_proc_else_impl(fail_node: ParseNode<State> | null, else_node: ParseNode<State>): boolean {
+		if (else_node._action_else) {
 			// fail_nodeから失敗ノードstateを取得
 			let states: State[] = [];
 			if (fail_node != null) {
@@ -767,7 +771,9 @@ export class ParseNode<State> {
 
 				default:
 					// else処理を実施
-					result = this._parse_proc_else_impl(node, else_node);
+					if (else_node != null) {
+						result = this._parse_proc_else_impl(node, else_node);
+					}
 					break;
 			}
 		}
